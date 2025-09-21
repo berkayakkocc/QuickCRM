@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "dotnet QuickCRM.API.dll",
+    "startCommand": "dotnet run --project QuickCRM.API --configuration Release",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
