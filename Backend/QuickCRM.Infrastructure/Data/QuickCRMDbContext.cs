@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using QuickCRM.Core.Entities;
+using Azure.Identity;
+using Microsoft.Data.SqlClient;
 
 namespace QuickCRM.Infrastructure.Data
 {
@@ -11,6 +13,30 @@ namespace QuickCRM.Infrastructure.Data
 
         public DbSet<Customer> Customers { get; set; }
         public DbSet<User> Users { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            if (!optionsBuilder.IsConfigured)
+            {
+                // Azure SQL Database için Azure Identity kullanımı
+                var connectionString = optionsBuilder.Options.FindExtension<Microsoft.EntityFrameworkCore.SqlServer.Infrastructure.Internal.SqlServerOptionsExtension>()?.ConnectionString;
+                
+                if (!string.IsNullOrEmpty(connectionString) && connectionString.Contains("database.windows.net"))
+                {
+                    // Azure SQL Database için Azure Identity authentication
+                    var credential = new DefaultAzureCredential();
+                    var tokenRequestContext = new Azure.Core.TokenRequestContext(new[] { "https://database.windows.net/.default" });
+                    var token = credential.GetToken(tokenRequestContext);
+                    
+                    var connection = new SqlConnection(connectionString);
+                    connection.AccessToken = token.Token;
+                    
+                    optionsBuilder.UseSqlServer(connection);
+                }
+            }
+            
+            base.OnConfiguring(optionsBuilder);
+        }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

@@ -1,1 +1,1 @@
-web: dotnet ./QuickCRM.API/bin/Release/net8.0/QuickCRM.API.dll
+web: dotnet ./QuickCRM.API/bin/Release/net9.0/QuickCRM.API.dll
