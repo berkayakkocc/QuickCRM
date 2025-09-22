@@ -21,16 +21,13 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore
-      working-directory: ./Backend
+      run: dotnet restore ./Backend/QuickCRM.sln
 
     - name: Build with dotnet
-      run: dotnet build --configuration Release --no-restore
-      working-directory: ./Backend
+      run: dotnet build ./Backend/QuickCRM.sln --configuration Release --no-restore
 
     - name: dotnet publish
-      run: dotnet publish -c Release -o ./publish --no-build
-      working-directory: ./Backend
+      run: dotnet publish ./Backend/QuickCRM.API/QuickCRM.API.csproj -c Release -o ./Backend/publish --no-build
 
     - name: Upload artifact for deployment job
       uses: actions/upload-artifact@v4
