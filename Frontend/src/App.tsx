@@ -1,4 +1,4 @@
-import React from 'react'
+// React import removed - not needed in modern React
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'

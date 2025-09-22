@@ -18,7 +18,12 @@ builder.Services.AddHealthChecks()
 
 // Database
 builder.Services.AddDbContext<QuickCRMDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
+        sqlOptions => sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: new[] { 40613 } // Azure SQL Serverless auto-pause error
+        )));
 
 // Repositories
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
@@ -57,6 +62,16 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+}
+else
+{
+    // Production'da da Swagger'ı aktifleştir
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "QuickCRM API v1");
+        c.RoutePrefix = "swagger"; // Swagger UI'yi /swagger endpoint'inde göster
+    });
 }
 
 app.UseHttpsRedirection();

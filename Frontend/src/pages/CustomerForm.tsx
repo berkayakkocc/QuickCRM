@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeftIcon } from '@heroicons/react/24/outline'
+// ArrowLeftIcon import removed - not used
 
 interface CustomerFormData {
   firstName: string

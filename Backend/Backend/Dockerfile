@@ -1,28 +1,33 @@
-# Multi-stage Dockerfile for .NET 9.0
+# Multi-stage Dockerfile for .NET 9.0 - Backend specific
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-# Sadece sln ve csproj'ları kopyala (restore cache için)
-COPY Backend/QuickCRM.sln ./
-COPY Backend/QuickCRM.API/QuickCRM.API.csproj ./QuickCRM.API/
-COPY Backend/QuickCRM.Application/QuickCRM.Application.csproj ./QuickCRM.Application/
-COPY Backend/QuickCRM.Core/QuickCRM.Core.csproj ./QuickCRM.Core/
-COPY Backend/QuickCRM.Infrastructure/QuickCRM.Infrastructure.csproj ./QuickCRM.Infrastructure/
+# Copy solution file
+COPY QuickCRM.sln ./
+
+# Copy project files
+COPY QuickCRM.API/QuickCRM.API.csproj QuickCRM.API/
+COPY QuickCRM.Application/QuickCRM.Application.csproj QuickCRM.Application/
+COPY QuickCRM.Core/QuickCRM.Core.csproj QuickCRM.Core/
+COPY QuickCRM.Infrastructure/QuickCRM.Infrastructure.csproj QuickCRM.Infrastructure/
 
 # Restore dependencies
 RUN dotnet restore QuickCRM.sln
 
-# Geri kalan kodu kopyala
-COPY Backend/. .
+# Copy source code
+COPY . .
 
-# Build ve publish
+# Build the application
 RUN dotnet build QuickCRM.sln -c Release -o /app/build
+
+# Publish the application
+FROM build AS publish
 RUN dotnet publish QuickCRM.API/QuickCRM.API.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
-COPY --from=build /app/publish .
+COPY --from=publish /app/publish .
 
 # Set environment variables
 ENV ASPNETCORE_ENVIRONMENT=Production
