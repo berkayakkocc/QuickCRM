@@ -48,11 +48,15 @@ jobs:
       with:
         name: .net-app
 
+    - name: Login to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
     - name: Deploy to Azure Web App
       id: deploy-to-webapp
       uses: azure/webapps-deploy@v2
       with:
         app-name: 'quickcrm-backend-2024'
         slot-name: 'Production'
-        publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_1234567890ABCDEF1234567890ABCDEF12345678 }}
         package: .
