@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using QuickCRM.Application.Services;
 using QuickCRM.Core.Interfaces;
 using QuickCRM.Infrastructure.Data;
