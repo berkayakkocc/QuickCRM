@@ -39,7 +39,7 @@
 
 ## 2. Environment Variables Ayarlama
 
-### Azure App Service'de Environment Variables:
+ ### Azure App Service'de Environment Variables:
 ```
 AZURE_SQL_SERVER=quickcrm-server
 AZURE_SQL_DATABASE=QuickCRM
