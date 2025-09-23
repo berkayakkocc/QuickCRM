@@ -34,7 +34,7 @@ const Dashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
       const response = await fetch(`${apiUrl}/api/stats/dashboard`)
       if (response.ok) {
         const data = await response.json()
@@ -49,7 +49,7 @@ const Dashboard: React.FC = () => {
 
   const fetchRecentCustomers = async () => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
       const response = await fetch(`${apiUrl}/api/customers`)
       if (response.ok) {
         const data = await response.json()
