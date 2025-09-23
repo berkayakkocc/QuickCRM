@@ -46,7 +46,9 @@ builder.Services.AddCors(options =>
                 "http://localhost:5173",
                 "https://localhost:5173",
                 "https://quickcrm.vercel.app",
-                "https://*.vercel.app"
+                "https://*.vercel.app",
+                "https://quickcrm-app.netlify.app",
+                "https://*.netlify.app"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
