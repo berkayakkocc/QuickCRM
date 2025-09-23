@@ -39,7 +39,8 @@ const CustomerForm: React.FC = () => {
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/customers/${id}`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const response = await fetch(`${apiUrl}/api/customers/${id}`)
       if (response.ok) {
         const customer = await response.json()
         setFormData({
@@ -63,7 +64,8 @@ const CustomerForm: React.FC = () => {
     setSaving(true)
 
     try {
-      const url = isEdit ? `/api/customers/${id}` : '/api/customers'
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const url = isEdit ? `${apiUrl}/api/customers/${id}` : `${apiUrl}/api/customers`
       const method = isEdit ? 'PUT' : 'POST'
       
       const payload = isEdit 

@@ -34,7 +34,8 @@ const Customers: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await fetch('/api/customers')
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const response = await fetch(`${apiUrl}/api/customers`)
       console.log('API Response:', response)
       if (response.ok) {
         const data = await response.json()
@@ -57,7 +58,8 @@ const Customers: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`/api/customers/search?searchTerm=${encodeURIComponent(searchTerm)}`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const response = await fetch(`${apiUrl}/api/customers/search?searchTerm=${encodeURIComponent(searchTerm)}`)
       if (response.ok) {
         const data = await response.json()
         setCustomers(data)
@@ -73,7 +75,8 @@ const Customers: React.FC = () => {
     }
 
     try {
-      const response = await fetch(`/api/customers/${id}`, {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
+      const response = await fetch(`${apiUrl}/api/customers/${id}`, {
         method: 'DELETE',
       })
       if (response.ok) {
