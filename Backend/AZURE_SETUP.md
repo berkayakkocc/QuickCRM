@@ -39,15 +39,12 @@
 
 ## 2. Environment Variables Ayarlama
 
-### Railway'de Environment Variables:
+### Azure App Service'de Environment Variables:
 ```
 AZURE_SQL_SERVER=quickcrm-server
 AZURE_SQL_DATABASE=QuickCRM
 AZURE_SQL_USER=quickcrmadmin
 AZURE_SQL_PASSWORD=your-password-here
-AZURE_TENANT_ID=your-tenant-id
-AZURE_CLIENT_ID=your-client-id
-AZURE_CLIENT_SECRET=your-client-secret
 ```
 
 ### Azure Tenant ID Bulma:
@@ -88,7 +85,7 @@ dotnet run --project QuickCRM.API --environment Production
 
 ### Health Check:
 ```bash
-curl https://your-app-url.railway.app/health
+curl https://your-app-url.azurewebsites.net/health
 ```
 
 ## 5. Güvenlik Notları
@@ -108,8 +105,8 @@ curl https://your-app-url.railway.app/health
 
 ### Log Kontrolü:
 ```bash
-# Railway logs
-railway logs
+# Azure App Service logs
+az webapp log tail --name your-app-name --resource-group your-resource-group
 
 # Local logs
 dotnet run --project QuickCRM.API --environment Production --verbosity detailed
