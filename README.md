@@ -89,7 +89,7 @@ QuickCRM, küçük ve orta ölçekli işletmeler için tasarlanmış modern bir 
 ---
 
 ### 👥 Müşteriler - Müşteri Listesi
-![Customers](https://hizliresim.com/kbklzmc)
+![Customers](https://i.hizliresim.com/mtj9mav.png)
 
 **Özellikler:**
 - **🔍 Gelişmiş Arama**: İsim, email, şirket bazında arama
@@ -108,7 +108,7 @@ QuickCRM, küçük ve orta ölçekli işletmeler için tasarlanmış modern bir 
 ---
 
 ### ➕ Yeni Müşteri - Müşteri Ekleme Formu
-![New Customer](https://hizliresim.com/rrq96bs)
+![New Customer](https://i.hizliresim.com/rrq96bs.png)
 
 **Özellikler:**
 - **📝 Kapsamlı Form**: Tüm gerekli müşteri bilgileri
