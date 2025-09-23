@@ -1,231 +1,288 @@
-# 🚀 QuickCRM Deployment Kılavuzu
+# 🚀 QuickCRM Deployment Guide
 
-## 📋 Gereksinimler
+Bu dokümantasyon, QuickCRM projesinin production ortamına deploy edilmesi için gerekli adımları içerir.
 
-### Sistem Gereksinimleri
-- **Docker Desktop** (Windows/Mac) veya **Docker Engine** (Linux)
-- **Docker Compose** (Docker Desktop ile birlikte gelir)
-- **Git** (Kod indirmek için)
+## 📋 İçindekiler
 
-### Minimum Sistem Kaynakları
-- **RAM**: 4GB (8GB önerilen)
-- **Disk**: 10GB boş alan
-- **CPU**: 2 core (4 core önerilen)
-
-## 🔧 Docker Kurulumu
-
-### Windows
-1. [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) indirin
-2. Kurulum dosyasını çalıştırın
-3. Bilgisayarı yeniden başlatın
-4. Docker Desktop'ı başlatın
-
-### macOS
-1. [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/) indirin
-2. DMG dosyasını açın ve Docker.app'i Applications klasörüne sürükleyin
-3. Docker Desktop'ı başlatın
-
-### Linux (Ubuntu/Debian)
-```bash
-# Docker kurulumu
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Docker Compose kurulumu
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-```
-
-## 🚀 Deployment Adımları
-
-### 1. Projeyi İndirin
-```bash
-git clone <repository-url>
-cd QuickCRM
-```
-
-### 2. Docker Servislerini Başlatın
-
-#### Windows (PowerShell)
-```powershell
-# Deployment script'ini çalıştırın
-.\deploy.ps1
-```
-
-#### Linux/macOS
-```bash
-# Deployment script'ini çalıştırın
-chmod +x deploy.sh
-./deploy.sh
-```
-
-#### Manuel Deployment
-```bash
-# Servisleri durdur (varsa)
-docker-compose down
-
-# Yeni image'ları build et
-docker-compose build --no-cache
-
-# Servisleri başlat
-docker-compose up -d
-
-# Logları kontrol et
-docker-compose logs -f
-```
-
-### 3. Servisleri Kontrol Edin
-```bash
-# Servis durumunu kontrol et
-docker-compose ps
-
-# Health check yap
-curl http://localhost:5000/health
-curl http://localhost/health
-```
-
-## 🌐 Erişim URL'leri
-
-- **Frontend**: http://localhost
-- **Backend API**: http://localhost:5000
-- **Swagger UI**: http://localhost:5000/swagger
-- **Database**: localhost:1433
-
-## 🔧 Yönetim Komutları
-
-### Servisleri Durdur
-```bash
-docker-compose down
-```
-
-### Servisleri Yeniden Başlat
-```bash
-docker-compose restart
-```
-
-### Logları Görüntüle
-```bash
-# Tüm servisler
-docker-compose logs -f
-
-# Sadece backend
-docker-compose logs -f backend
-
-# Sadece frontend
-docker-compose logs -f frontend
-```
-
-### Veritabanını Sıfırla
-```bash
-# Servisleri durdur
-docker-compose down
-
-# Volume'ları sil
-docker volume rm quickcrm_sqlserver_data
-
-# Servisleri yeniden başlat
-docker-compose up -d
-```
-
-## 🐛 Sorun Giderme
-
-### Port Çakışması
-Eğer portlar kullanımda ise:
-```bash
-# Kullanılan portları kontrol et
-netstat -an | findstr :80
-netstat -an | findstr :5000
-netstat -an | findstr :1433
-```
-
-### Docker Servisleri Çalışmıyor
-```bash
-# Docker servisini başlat
-sudo systemctl start docker  # Linux
-# veya Docker Desktop'ı başlat (Windows/Mac)
-```
-
-### Veritabanı Bağlantı Hatası
-```bash
-# SQL Server container'ını kontrol et
-docker-compose logs sqlserver
-
-# Container'ı yeniden başlat
-docker-compose restart sqlserver
-```
-
-### Frontend Build Hatası
-```bash
-# Node modules'ı temizle ve yeniden yükle
-docker-compose exec frontend npm ci
-```
-
-## 📊 Monitoring
-
-### Container Durumu
-```bash
-docker-compose ps
-```
-
-### Kaynak Kullanımı
-```bash
-docker stats
-```
-
-### Disk Kullanımı
-```bash
-docker system df
-```
-
-## 🔒 Production Güvenlik
-
-### Environment Variables
-Production'da şu değişkenleri güncelleyin:
-- `SA_PASSWORD`: Güçlü SQL Server şifresi
-- `ConnectionStrings__DefaultConnection`: Production veritabanı
-
-### SSL/HTTPS
-Production'da SSL sertifikası ekleyin:
-```yaml
-# docker-compose.override.yml
-services:
-  frontend:
-    volumes:
-      - ./ssl:/etc/nginx/ssl
-    environment:
-      - SSL_CERT=/etc/nginx/ssl/cert.pem
-      - SSL_KEY=/etc/nginx/ssl/key.pem
-```
-
-## 📈 Performance Optimizasyonu
-
-### Memory Limits
-```yaml
-# docker-compose.override.yml
-services:
-  backend:
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
-```
-
-### Database Optimization
-```sql
--- SQL Server'da index oluştur
-CREATE INDEX IX_Customers_Email ON Customers(Email);
-CREATE INDEX IX_Customers_CreatedAt ON Customers(CreatedAt);
-```
-
-## 🆘 Destek
-
-Sorun yaşıyorsanız:
-1. Logları kontrol edin: `docker-compose logs`
-2. GitHub Issues'da sorun bildirin
-3. README.md'yi inceleyin
+- [Azure App Service Deployment](#azure-app-service-deployment)
+- [Netlify Frontend Deployment](#netlify-frontend-deployment)
+- [Azure SQL Database Setup](#azure-sql-database-setup)
+- [Environment Configuration](#environment-configuration)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-**QuickCRM** - Modern, hızlı ve güvenli müşteri yönetim sistemi 🚀
+## 🌐 Azure App Service Deployment
+
+### 1. Azure Portal Setup
+
+#### App Service Oluşturma
+1. Azure Portal'a gidin
+2. **App Services** → **Create**
+3. **Resource Group**: `quickcrm-rg`
+4. **Name**: `quickcrm-backend-2024`
+5. **Runtime**: `.NET 9`
+6. **Region**: `West Europe`
+7. **Pricing Plan**: `Basic B1`
+
+#### SQL Database Oluşturma
+1. **SQL databases** → **Create**
+2. **Database name**: `QuickCRM`
+3. **Server**: Yeni server oluştur
+4. **Server name**: `quickcrm-server`
+5. **Admin username**: `quickcrmadmin`
+6. **Password**: Güçlü şifre belirleyin
+7. **Pricing tier**: `Basic`
+
+### 2. Visual Studio Deployment
+
+#### Publish Profile Oluşturma
+1. Azure Portal'da App Service'e gidin
+2. **Get publish profile** butonuna tıklayın
+3. `.pubxml` dosyasını indirin
+4. `Properties/PublishProfiles/` klasörüne koyun
+
+#### Visual Studio'dan Deploy
+1. Solution'ı açın
+2. **QuickCRM.API** projesine sağ tıklayın
+3. **Publish** seçin
+4. **Import Profile** ile `.pubxml` dosyasını seçin
+5. **Publish** butonuna tıklayın
+
+### 3. Connection String Configuration
+
+#### Azure Portal'da Ayarlama
+1. App Service → **Configuration**
+2. **Connection strings** sekmesi
+3. **New connection string**:
+   - **Name**: `DefaultConnection`
+   - **Value**: 
+     ```
+     Server=tcp:quickcrm-server.database.windows.net,1433;Initial Catalog=QuickCRM;Persist Security Info=False;User ID=quickcrmadmin;Password=YOUR_PASSWORD;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;
+     ```
+   - **Type**: `SQLServer`
+
+#### CORS Ayarları
+1. **Configuration** → **CORS**
+2. **Allowed origins** ekleyin:
+   - `https://quickcrm-app.netlify.app`
+   - `https://*.netlify.app`
+   - `http://localhost:3000`
+   - `http://localhost:5173`
+
+---
+
+## 🌐 Netlify Frontend Deployment
+
+### 1. Netlify Setup
+
+#### Proje Oluşturma
+1. [Netlify](https://netlify.com) hesabı oluşturun
+2. **New site from Git** seçin
+3. GitHub repository'yi bağlayın
+4. **Site settings**:
+   - **Site name**: `quickcrm-app`
+   - **Branch**: `main`
+
+#### Build Settings
+1. **Site settings** → **Build & deploy**
+2. **Build settings**:
+   - **Base directory**: `Frontend`
+   - **Build command**: `npm run build`
+   - **Publish directory**: `Frontend/dist`
+
+### 2. Environment Variables
+
+#### Netlify'da Ayarlama
+1. **Site settings** → **Environment variables**
+2. **Add variable**:
+   - **Key**: `VITE_API_URL`
+   - **Value**: `https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net`
+
+### 3. Custom Domain (Opsiyonel)
+
+#### Domain Ekleme
+1. **Site settings** → **Domain management**
+2. **Add custom domain**
+3. DNS ayarlarını yapılandırın
+
+---
+
+## 🗄️ Azure SQL Database Setup
+
+### 1. Database Configuration
+
+#### Firewall Rules
+1. SQL Server → **Networking**
+2. **Add current client IP address**
+3. **Allow Azure services** → **ON**
+
+#### Connection String
+```
+Server=tcp:quickcrm-server.database.windows.net,1433;Initial Catalog=QuickCRM;Persist Security Info=False;User ID=quickcrmadmin;Password=YOUR_PASSWORD;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;
+```
+
+### 2. Database Migration
+
+#### Otomatik Migration
+- Uygulama başlatıldığında otomatik olarak migration'lar çalışır
+- `Program.cs` içinde `context.Database.Migrate()` ile
+
+#### Manuel Migration (Gerekirse)
+```bash
+cd Backend/QuickCRM.API
+dotnet ef database update
+```
+
+---
+
+## ⚙️ Environment Configuration
+
+### Backend Environment Variables
+
+#### appsettings.Production.json
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=tcp:quickcrm-server.database.windows.net,1433;Initial Catalog=QuickCRM;Persist Security Info=False;User ID=quickcrmadmin;Password=YOUR_PASSWORD;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=60;"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*"
+}
+```
+
+### Frontend Environment Variables
+
+#### .env.production
+```env
+VITE_API_URL=https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Backend Sorunları
+
+#### 500 Internal Server Error
+- **Sebep**: Connection string yanlış
+- **Çözüm**: Azure Portal'da connection string'i kontrol edin
+
+#### 40613 Database Not Available
+- **Sebep**: Azure SQL Serverless auto-pause
+- **Çözüm**: `EnableRetryOnFailure` ile retry policy
+
+#### CORS Error
+- **Sebep**: Frontend domain'i CORS'ta yok
+- **Çözüm**: Azure Portal'da CORS ayarlarını güncelleyin
+
+### Frontend Sorunları
+
+#### Build Error
+- **Sebep**: TypeScript hataları
+- **Çözüm**: `npm run build` ile hataları kontrol edin
+
+#### API Connection Error
+- **Sebep**: Yanlış API URL
+- **Çözüm**: Environment variable'ı kontrol edin
+
+### Database Sorunları
+
+#### Migration Error
+- **Sebep**: Database bağlantı sorunu
+- **Çözüm**: Connection string ve firewall ayarlarını kontrol edin
+
+#### Seed Data Error
+- **Sebep**: Tablolar oluşmamış
+- **Çözüm**: Migration'ları manuel çalıştırın
+
+---
+
+## 📊 Monitoring
+
+### Azure App Service
+- **Log Stream**: Real-time logs
+- **Metrics**: Performance monitoring
+- **Health Check**: `/health` endpoint
+
+### Netlify
+- **Deploy Logs**: Build ve deploy logs
+- **Analytics**: Site performance
+- **Functions**: Serverless functions (opsiyonel)
+
+---
+
+## 🔄 CI/CD Pipeline
+
+### GitHub Actions (Gelecek)
+```yaml
+name: Deploy to Azure
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy to Azure
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: 'quickcrm-backend-2024'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+```
+
+---
+
+## 📈 Performance Optimization
+
+### Backend
+- **MemoryCache**: API response caching
+- **Connection Pooling**: Database connection optimization
+- **Retry Policies**: Transient error handling
+
+### Frontend
+- **Code Splitting**: Lazy loading
+- **Image Optimization**: WebP format
+- **CDN**: Static asset delivery
+
+---
+
+## 🔒 Security Checklist
+
+### Backend
+- [x] HTTPS enforcement
+- [x] CORS configuration
+- [x] Input validation
+- [x] SQL injection protection
+- [x] Security headers
+
+### Frontend
+- [x] HTTPS only
+- [x] Input sanitization
+- [x] XSS protection
+- [x] Secure headers
+
+### Database
+- [x] Encrypted connections
+- [x] Firewall rules
+- [x] Access control
+- [x] Regular backups
+
+---
+
+## 📞 Support
+
+Deployment sorunları için:
+- **GitHub Issues**: [Create issue](https://github.com/yourusername/QuickCRM/issues)
+- **Azure Support**: Azure Portal → Help + Support
+- **Netlify Support**: Netlify Dashboard → Help
+
+---
+
+**QuickCRM Deployment Guide** - Production'a güvenli deployment 🚀
