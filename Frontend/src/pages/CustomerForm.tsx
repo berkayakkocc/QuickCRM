@@ -7,7 +7,7 @@ interface CustomerFormData {
   lastName: string
   email: string
   phone: string
-  company: string
+  company: string 
   notes: string
 }
 
