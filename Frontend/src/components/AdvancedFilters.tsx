@@ -53,7 +53,7 @@ const AdvancedFilters: React.FC<AdvancedFiltersProps> = ({
       new Set(
         customers
           .map(customer => customer.company)
-          .filter(company => company && company.trim() !== '')
+          .filter((company): company is string => company !== undefined && company.trim() !== '')
       )
     ).sort();
     

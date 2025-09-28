@@ -76,7 +76,7 @@ interface Activity {
 
 const Dashboard: React.FC = () => {
   const { theme } = useTheme()
-  const { openSearch } = useSearch()
+  // const { openSearch } = useSearch() // Temporarily disabled
   const [stats, setStats] = useState<DashboardStats>({
     totalCustomers: 0,
     activeCustomers: 0,
