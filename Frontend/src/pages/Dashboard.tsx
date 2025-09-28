@@ -2,7 +2,7 @@
 import { Link } from 'react-router-dom'
 import { apiRequest } from '../config/api'
 import { useTheme } from '../contexts/ThemeContext'
-import { useSearch } from '../contexts/SearchContext'
+// import { useSearch } from '../contexts/SearchContext' // Temporarily disabled
 import toast from 'react-hot-toast'
 import {
   Chart as ChartJS,
