@@ -39,7 +39,7 @@ A comprehensive CRM (Customer Relationship Management) backend API built with .N
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/berkaycan/QuickCRM.git
 cd QuickCRM/Backend
 ```
 
@@ -125,9 +125,23 @@ Content-Type: application/json
 - `POST /api/customers` - Create new customer
 - `PUT /api/customers/{id}` - Update customer
 - `DELETE /api/customers/{id}` - Delete customer (Admin/Manager only)
+- `GET /api/customers/search?searchTerm={term}` - Search customers
+- `GET /api/customers/active` - Get active customers only
+
+### Customer Notes (Requires Authentication)
+- `GET /api/customernotes/customer/{customerId}` - Get all notes for a customer
+- `GET /api/customernotes/{id}` - Get specific note by ID
+- `POST /api/customernotes` - Create new note
+- `PUT /api/customernotes/{id}` - Update note (own notes only)
+- `DELETE /api/customernotes/{id}` - Delete note (own notes only)
+- `GET /api/customernotes/customer/{customerId}/by/{createdBy}` - Get notes by creator type
+- `GET /api/customernotes/customer/{customerId}/count` - Get note count for customer
 
 ### Statistics (Requires Authentication)
 - `GET /api/stats/dashboard` - Get dashboard statistics
+- `GET /api/stats/customers/total` - Get total customer count
+- `GET /api/stats/customers/active` - Get active customer count
+- `GET /api/stats/customers/this-month` - Get this month's new customers
 
 ### Health Check
 - `GET /health` - Application health status
@@ -211,7 +225,12 @@ Configure JWT settings in `appsettings.json`:
 ```
 
 ### CORS Settings
-Configure CORS origins in `Program.cs` for your frontend applications.
+CORS is configured to allow only the Netlify frontend domain:
+- **Allowed Origin**: `https://quickcrm-app.netlify.app`
+- **Methods**: All HTTP methods
+- **Headers**: All headers
+
+Configure CORS origins in `Program.cs` if you need to add additional domains.
 
 ## 📊 Database Schema
 
@@ -233,6 +252,14 @@ Configure CORS origins in `Program.cs` for your frontend applications.
 - Company
 - Notes
 - IsActive
+- CreatedAt
+- UpdatedAt
+
+### CustomerNotes Table
+- Id (Primary Key)
+- CustomerId (Foreign Key)
+- Content
+- CreatedBy (admin/customer)
 - CreatedAt
 - UpdatedAt
 
@@ -261,11 +288,17 @@ Configure CORS origins in `Program.cs` for your frontend applications.
 
 This project is licensed under the MIT License.
 
+## 🌐 Live Demo
+
+- **Frontend**: [https://quickcrm-app.netlify.app](https://quickcrm-app.netlify.app)
+- **Backend API**: [https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net](https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net)
+- **API Documentation**: [https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/swagger](https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/swagger)
+
 ## 🆘 Support
 
 For support and questions:
 - Email: support@quickcrm.com
-- Documentation: [API Documentation](https://localhost:44305/swagger/index.html)
+- Documentation: [API Documentation](https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/swagger)
 
 ---
 
