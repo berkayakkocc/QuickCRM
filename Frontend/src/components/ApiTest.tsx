@@ -9,7 +9,8 @@ const ApiTest: React.FC = () => {
     setResult('')
     
     try {
-      const response = await fetch('/api/customers')
+      // Swagger'dan doğru endpoint'i kullan
+      const response = await fetch('https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/api/Customers')
       const data = await response.json()
       
       if (response.ok) {

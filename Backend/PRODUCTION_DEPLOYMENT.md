@@ -265,3 +265,4 @@ Herhangi bir sorun durumunda:
 **Son Güncelleme**: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 **Versiyon**: 1.0.0
 **Environment**: Production
+

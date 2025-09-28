@@ -117,3 +117,4 @@ echo -e "  - View logs: docker-compose -f docker-compose.prod.yml logs -f"
 echo -e "  - Stop services: docker-compose -f docker-compose.prod.yml down"
 echo -e "  - Restart services: docker-compose -f docker-compose.prod.yml restart"
 echo -e "  - Update services: docker-compose -f docker-compose.prod.yml up --build -d"
+

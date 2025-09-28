@@ -116,3 +116,4 @@ find $BACKUP_DIR -name "quickcrm_backup_*" -type f -mtime +7 -delete
 
 echo -e "${GREEN}✅ Cleanup completed${NC}"
 echo -e "${BLUE}💡 Tip: Consider uploading backups to cloud storage for disaster recovery${NC}"
+

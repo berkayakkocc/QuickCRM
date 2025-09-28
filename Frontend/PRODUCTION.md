@@ -252,3 +252,4 @@ git pull
 ---
 
 **Not**: Bu doküman production ortamı için hazırlanmıştır. Development ortamı için farklı konfigürasyonlar gerekebilir.
+

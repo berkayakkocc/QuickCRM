@@ -1,15 +1,33 @@
 ﻿// API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || process.env.REACT_APP_API_URL || '/api'
 
 export const apiConfig = {
   baseURL: API_BASE_URL,
   endpoints: {
-    customers: `${API_BASE_URL}/Customers`,
-    customersSearch: `${API_BASE_URL}/Customers/search`,
-    statsDashboard: `${API_BASE_URL}/Stats/dashboard`,
-    statsCustomersTotal: `${API_BASE_URL}/Stats/customers/total`,
-    statsCustomersActive: `${API_BASE_URL}/Stats/customers/active`,
-    statsCustomersThisMonth: `${API_BASE_URL}/Stats/customers/this-month`,
+    // Auth endpoints
+    auth: {
+      login: `${API_BASE_URL}/Auth/login`,
+      register: `${API_BASE_URL}/Auth/register`,
+    },
+    // Customer endpoints
+    customers: {
+      base: `${API_BASE_URL}/Customers`,
+      search: `${API_BASE_URL}/Customers/search`,
+      byId: (id: number) => `${API_BASE_URL}/Customers/${id}`,
+    },
+    // Stats endpoints
+    stats: {
+      dashboard: `${API_BASE_URL}/Stats/dashboard`,
+      customersTotal: `${API_BASE_URL}/Stats/customers/total`,
+      customersActive: `${API_BASE_URL}/Stats/customers/active`,
+      customersThisMonth: `${API_BASE_URL}/Stats/customers/this-month`,
+    },
+    // Customer Notes endpoints
+    customerNotes: {
+      base: `${API_BASE_URL}/CustomerNotes`,
+      byCustomerId: (customerId: number) => `${API_BASE_URL}/CustomerNotes/customer/${customerId}`,
+      byId: (id: number) => `${API_BASE_URL}/CustomerNotes/${id}`,
+    }
   }
 }
 

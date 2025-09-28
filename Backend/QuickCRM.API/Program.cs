@@ -70,7 +70,6 @@ builder.Services.AddSwaggerGen(c =>
 
 // Health checks
 builder.Services.AddHealthChecks()
-    .AddDbContext<QuickCRMDbContext>()
     .AddCheck("database", () => 
     {
         using var scope = builder.Services.BuildServiceProvider().CreateScope();
@@ -220,7 +219,7 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    // Production'da Swagger'ı sadece belirli IP'lerden erişilebilir hale getir
+    // Production'da Swagger'ı aktifleştir
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {

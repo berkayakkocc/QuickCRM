@@ -111,3 +111,4 @@ fi
 
 echo "================================"
 echo -e "${BLUE}🏥 Health check completed${NC}"
+
