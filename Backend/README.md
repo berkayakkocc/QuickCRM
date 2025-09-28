@@ -294,6 +294,30 @@ This project is licensed under the MIT License.
 - **Backend API**: [https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net](https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net)
 - **API Documentation**: [https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/swagger](https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net/swagger)
 
+## 📊 Dashboard Screenshots
+
+### Dashboard Overview
+![Dashboard Overview](https://i.hizliresim.com/2yh41et.jpg)
+*Main dashboard showing customer statistics, analytics, and key metrics*
+
+### Dashboard Analytics
+![Dashboard Analytics](https://i.hizliresim.com/mlg7tm3.jpg)
+*Detailed analytics view with customer insights and performance metrics*
+
+## 👥 Customer Management Screenshots
+
+### Customer List View
+![Customer List View](https://i.hizliresim.com/lxt5630.jpg)
+*Customer management interface showing the list of customers with search and filter options*
+
+### Add New Customer
+![Add New Customer](https://i.hizliresim.com/zd7fo7h.jpg)
+*New customer creation form with comprehensive input fields and validation*
+
+### Customer Details & Notes
+![Customer Details & Notes](https://i.hizliresim.com/3c34g2j.jpg)
+*Detailed customer view with notes management and customer information editing*
+
 ## 🆘 Support
 
 For support and questions:
