@@ -13,6 +13,7 @@ namespace QuickCRM.Infrastructure.Data
 
         public DbSet<Customer> Customers { get; set; }
         public DbSet<User> Users { get; set; }
+        public DbSet<CustomerNote> CustomerNotes { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -71,6 +72,28 @@ namespace QuickCRM.Infrastructure.Data
                 
                 entity.HasIndex(e => e.Username).IsUnique();
                 entity.HasIndex(e => e.Email).IsUnique();
+            });
+
+            // CustomerNote entity configuration
+            modelBuilder.Entity<CustomerNote>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.CustomerId).IsRequired();
+                entity.Property(e => e.Content).IsRequired().HasMaxLength(1000);
+                entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+                entity.Property(e => e.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
+                entity.Property(e => e.IsActive).HasDefaultValue(true);
+                
+                // Foreign key relationship
+                entity.HasOne(e => e.Customer)
+                      .WithMany()
+                      .HasForeignKey(e => e.CustomerId)
+                      .OnDelete(DeleteBehavior.Cascade);
+                
+                // Indexes
+                entity.HasIndex(e => e.CustomerId);
+                entity.HasIndex(e => e.CreatedBy);
             });
         }
     }

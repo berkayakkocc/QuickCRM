@@ -1,5 +1,9 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { apiRequest } from '../config/api'
+import { useTheme } from '../contexts/ThemeContext'
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts'
+import toast from 'react-hot-toast'
 // ArrowLeftIcon import removed - not used
 
 interface CustomerFormData {
@@ -12,6 +16,7 @@ interface CustomerFormData {
 }
 
 const CustomerForm: React.FC = () => {
+  const { theme } = useTheme()
   const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
@@ -24,6 +29,26 @@ const CustomerForm: React.FC = () => {
     company: '',
     notes: ''
   })
+
+  // Form submit function for keyboard shortcut
+  const handleFormSubmit = () => {
+    const form = document.querySelector('form');
+    if (form) {
+      const submitButton = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+      if (submitButton && !submitButton.disabled) {
+        submitButton.click();
+      }
+    }
+  };
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onSave: handleFormSubmit,
+    onEscape: () => {
+      console.log('CustomerForm: Escape pressed - going back');
+      navigate('/customers');
+    }
+  });
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -39,54 +64,77 @@ const CustomerForm: React.FC = () => {
 
     setLoading(true)
     try {
-      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
-      const response = await fetch(`${apiUrl}/api/customers/${id}`)
-      if (response.ok) {
-        const customer = await response.json()
-        setFormData({
-          firstName: customer.firstName,
-          lastName: customer.lastName,
-          email: customer.email,
-          phone: customer.phone || '',
-          company: customer.company || '',
-          notes: customer.notes || ''
-        })
-      }
+      const customer = await apiRequest(`/Customers/${id}`)
+      setFormData({
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        email: customer.email,
+        phone: customer.phone || '',
+        company: customer.company || '',
+        notes: customer.notes || ''
+      })
     } catch (error) {
       console.error('Error fetching customer:', error)
+      toast.error('Müşteri bilgileri yüklenirken hata oluştu!')
     } finally {
       setLoading(false)
     }
   }
 
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onSave: () => {
+      if (!saving) {
+        const form = document.querySelector('form');
+        if (form) {
+          const submitButton = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+          if (submitButton && !submitButton.disabled) {
+            submitButton.click();
+          }
+        }
+      }
+    },
+    onEscape: () => {
+      navigate('/customers');
+    }
+  });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    console.log('Form submitted!') // Debug
+    console.log('Form data:', formData) // Debug
+    console.log('Is edit:', isEdit) // Debug
     setSaving(true)
 
     try {
-      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
-      const url = isEdit ? `${apiUrl}/api/customers/${id}` : `${apiUrl}/api/customers`
+      const url = isEdit ? `/Customers/${id}` : '/Customers'
       const method = isEdit ? 'PUT' : 'POST'
       
       const payload = isEdit 
         ? { id: parseInt(id!), ...formData, isActive: true }
         : formData
 
-      const response = await fetch(url, {
+      console.log('API Request:', { url, method, payload }) // Debug
+
+      await apiRequest(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        navigate('/customers')
-      } else {
-        console.error('Error saving customer')
-      }
+      console.log('API Request successful!') // Debug
+      
+      // Başarı mesajını göster
+      const successMsg = isEdit ? 'Müşteri başarıyla güncellendi!' : 'Müşteri başarıyla oluşturuldu!'
+      toast.success(successMsg)
+      
+      // 2 saniye bekle ve sonra yönlendir
+      setTimeout(() => {
+        navigate('/customers', { replace: true })
+      }, 2000)
+      
     } catch (error) {
       console.error('Error saving customer:', error)
+      toast.error('Müşteri kaydedilirken bir hata oluştu!')
     } finally {
       setSaving(false)
     }
@@ -103,17 +151,17 @@ const CustomerForm: React.FC = () => {
   if (loading) {
     return (
       <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        backgroundColor: 'var(--bg-secondary)',
         minHeight: '100vh',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative'
+        transition: 'background-color 0.3s ease'
       }}>
         <div style={{
-          fontSize: '1.125rem',
-          color: '#ffffff',
-          textShadow: '0 2px 10px rgba(0, 0, 0, 0.3)'
+          fontSize: '1rem',
+          color: 'var(--text-secondary)',
+          transition: 'color 0.3s ease'
         }}>
           Yükleniyor...
         </div>
@@ -123,59 +171,45 @@ const CustomerForm: React.FC = () => {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      backgroundColor: 'var(--bg-secondary)',
       minHeight: '100vh',
-      padding: '1rem',
-      position: 'relative'
+      padding: '2rem 1rem',
+      transition: 'background-color 0.3s ease'
     }}>
-      {/* Animated background elements */}
-      <div style={{
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        right: '0',
-        bottom: '0',
-        background: 'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%), radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.2) 0%, transparent 50%)',
-        pointerEvents: 'none'
-      }}></div>
-
       <div style={{
         maxWidth: '56rem',
-        margin: '0 auto',
-        position: 'relative',
-        zIndex: 1
+        margin: '0 auto'
       }}>
         {/* Header */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           marginBottom: '2rem',
-          padding: '2rem 0 1rem 0'
+          padding: '0 0 1rem 0'
         }}>
           <button
             onClick={() => navigate('/customers')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              padding: '0.75rem 1.5rem',
-              backgroundColor: 'rgba(255, 255, 255, 0.2)',
-              color: '#ffffff',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderRadius: '12px',
+              padding: '0.5rem 1rem',
+              backgroundColor: 'transparent',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-primary)',
+              borderRadius: '8px',
               textDecoration: 'none',
               fontWeight: '500',
-              marginRight: '2rem',
-              transition: 'all 0.3s ease',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)'
+              marginRight: '1.5rem',
+              transition: 'all 0.2s ease',
+              cursor: 'pointer'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+              e.currentTarget.style.color = 'var(--text-primary)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.color = 'var(--text-secondary)';
             }}
           >
             <span style={{ marginRight: '0.5rem' }}>←</span>
@@ -183,21 +217,21 @@ const CustomerForm: React.FC = () => {
           </button>
           <div>
             <h1 style={{
-              fontSize: '2.5rem',
-              fontWeight: '800',
-              color: '#ffffff',
-              textShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+              fontSize: '1.875rem',
+              fontWeight: '700',
+              color: 'var(--text-primary)',
               margin: '0 0 0.5rem 0',
-              letterSpacing: '-0.02em'
+              letterSpacing: '-0.02em',
+              transition: 'color 0.3s ease'
             }}>
               {isEdit ? 'Müşteri Düzenle' : 'Yeni Müşteri'}
             </h1>
             <p style={{
-              fontSize: '1.125rem',
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontWeight: '500',
-              textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)',
-              margin: '0'
+              fontSize: '1rem',
+              color: 'var(--text-secondary)',
+              fontWeight: '400',
+              margin: '0',
+              transition: 'color 0.3s ease'
             }}>
               {isEdit ? 'Müşteri bilgilerini güncelleyin' : 'Yeni müşteri bilgilerini girin'}
             </p>
@@ -206,25 +240,14 @@ const CustomerForm: React.FC = () => {
 
         {/* Form */}
         <div style={{
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderRadius: '24px',
-          boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '12px',
+          boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+          border: '1px solid var(--border-primary)',
           overflow: 'hidden',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)',
-          position: 'relative'
+          transition: 'all 0.3s ease'
         }}>
-          <div style={{
-            position: 'absolute',
-            top: '0',
-            left: '0',
-            right: '0',
-            height: '4px',
-            background: 'linear-gradient(90deg, #2563eb, #1d4ed8, #9333ea)'
-          }}></div>
-
-          <form onSubmit={handleSubmit} style={{ padding: '2rem' }}>
+          <form onSubmit={handleSubmit} style={{ padding: '1.5rem' }}>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
@@ -235,8 +258,9 @@ const CustomerForm: React.FC = () => {
                 <label htmlFor="firstName" style={{
                   display: 'block',
                   fontSize: '0.875rem',
-                  fontWeight: '600',
-                  color: '#374151',
+                  fontWeight: '500',
+                  color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                   marginBottom: '0.5rem'
                 }}>
                   Ad *
@@ -250,24 +274,23 @@ const CustomerForm: React.FC = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '1rem',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
-                    fontSize: '1rem',
+                    padding: '0.75rem',
+                    border: '1px solid var(--border-secondary)',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
                     outline: 'none',
-                    transition: 'all 0.3s ease',
-                    backgroundColor: '#fafafa',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.borderColor = 'var(--text-primary)';
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${theme === 'dark' ? 'rgba(249, 250, 251, 0.1)' : 'rgba(31, 41, 55, 0.1)'}`;
                   }}
                   onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.borderColor = 'var(--border-secondary)';
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.backgroundColor = '#fafafa';
                   }}
                 />
               </div>
@@ -276,8 +299,9 @@ const CustomerForm: React.FC = () => {
                 <label htmlFor="lastName" style={{
                   display: 'block',
                   fontSize: '0.875rem',
-                  fontWeight: '600',
-                  color: '#374151',
+                  fontWeight: '500',
+                  color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                   marginBottom: '0.5rem'
                 }}>
                   Soyad *
@@ -291,24 +315,23 @@ const CustomerForm: React.FC = () => {
                   required
                   style={{
                     width: '100%',
-                    padding: '1rem',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
-                    fontSize: '1rem',
+                    padding: '0.75rem',
+                    border: '1px solid var(--border-secondary)',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
                     outline: 'none',
-                    transition: 'all 0.3s ease',
-                    backgroundColor: '#fafafa',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.borderColor = 'var(--text-primary)';
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${theme === 'dark' ? 'rgba(249, 250, 251, 0.1)' : 'rgba(31, 41, 55, 0.1)'}`;
                   }}
                   onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.borderColor = 'var(--border-secondary)';
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.backgroundColor = '#fafafa';
                   }}
                 />
               </div>
@@ -318,8 +341,9 @@ const CustomerForm: React.FC = () => {
               <label htmlFor="email" style={{
                 display: 'block',
                 fontSize: '0.875rem',
-                fontWeight: '600',
-                color: '#374151',
+                fontWeight: '500',
+                color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                 marginBottom: '0.5rem'
               }}>
                 E-posta *
@@ -333,24 +357,23 @@ const CustomerForm: React.FC = () => {
                 required
                 style={{
                   width: '100%',
-                  padding: '1rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '12px',
-                  fontSize: '1rem',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border-secondary)',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
                   outline: 'none',
-                  transition: 'all 0.3s ease',
-                  backgroundColor: '#fafafa',
+                  transition: 'all 0.2s ease',
+                  backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                   boxSizing: 'border-box'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#2563eb';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.borderColor = '#6b7280';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(107, 114, 128, 0.1)';
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
                   e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.backgroundColor = '#fafafa';
                 }}
               />
             </div>
@@ -365,8 +388,9 @@ const CustomerForm: React.FC = () => {
                 <label htmlFor="phone" style={{
                   display: 'block',
                   fontSize: '0.875rem',
-                  fontWeight: '600',
-                  color: '#374151',
+                  fontWeight: '500',
+                  color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                   marginBottom: '0.5rem'
                 }}>
                   Telefon
@@ -379,24 +403,23 @@ const CustomerForm: React.FC = () => {
                   onChange={handleChange}
                   style={{
                     width: '100%',
-                    padding: '1rem',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
-                    fontSize: '1rem',
+                    padding: '0.75rem',
+                    border: '1px solid var(--border-secondary)',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
                     outline: 'none',
-                    transition: 'all 0.3s ease',
-                    backgroundColor: '#fafafa',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.borderColor = 'var(--text-primary)';
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${theme === 'dark' ? 'rgba(249, 250, 251, 0.1)' : 'rgba(31, 41, 55, 0.1)'}`;
                   }}
                   onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.borderColor = 'var(--border-secondary)';
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.backgroundColor = '#fafafa';
                   }}
                 />
               </div>
@@ -405,8 +428,9 @@ const CustomerForm: React.FC = () => {
                 <label htmlFor="company" style={{
                   display: 'block',
                   fontSize: '0.875rem',
-                  fontWeight: '600',
-                  color: '#374151',
+                  fontWeight: '500',
+                  color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                   marginBottom: '0.5rem'
                 }}>
                   Şirket
@@ -419,24 +443,23 @@ const CustomerForm: React.FC = () => {
                   onChange={handleChange}
                   style={{
                     width: '100%',
-                    padding: '1rem',
-                    border: '2px solid #e5e7eb',
-                    borderRadius: '12px',
-                    fontSize: '1rem',
+                    padding: '0.75rem',
+                    border: '1px solid var(--border-secondary)',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
                     outline: 'none',
-                    transition: 'all 0.3s ease',
-                    backgroundColor: '#fafafa',
+                    transition: 'all 0.2s ease',
+                    backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                     boxSizing: 'border-box'
                   }}
                   onFocus={(e) => {
-                    e.currentTarget.style.borderColor = '#2563eb';
-                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                    e.currentTarget.style.backgroundColor = '#ffffff';
+                    e.currentTarget.style.borderColor = 'var(--text-primary)';
+                    e.currentTarget.style.boxShadow = `0 0 0 3px ${theme === 'dark' ? 'rgba(249, 250, 251, 0.1)' : 'rgba(31, 41, 55, 0.1)'}`;
                   }}
                   onBlur={(e) => {
-                    e.currentTarget.style.borderColor = '#e5e7eb';
+                    e.currentTarget.style.borderColor = 'var(--border-secondary)';
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.backgroundColor = '#fafafa';
                   }}
                 />
               </div>
@@ -446,8 +469,9 @@ const CustomerForm: React.FC = () => {
               <label htmlFor="notes" style={{
                 display: 'block',
                 fontSize: '0.875rem',
-                fontWeight: '600',
-                color: '#374151',
+                fontWeight: '500',
+                color: 'var(--text-primary)',
+              transition: 'color 0.3s ease',
                 marginBottom: '0.5rem'
               }}>
                 Notlar
@@ -460,26 +484,25 @@ const CustomerForm: React.FC = () => {
                 rows={4}
                 style={{
                   width: '100%',
-                  padding: '1rem',
-                  border: '2px solid #e5e7eb',
-                  borderRadius: '12px',
-                  fontSize: '1rem',
+                  padding: '0.75rem',
+                  border: '1px solid var(--border-secondary)',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
                   outline: 'none',
-                  transition: 'all 0.3s ease',
-                  backgroundColor: '#fafafa',
+                  transition: 'all 0.2s ease',
+                  backgroundColor: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
                   resize: 'vertical',
-                  minHeight: '120px',
+                  minHeight: '100px',
                   boxSizing: 'border-box'
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#2563eb';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.1)';
-                  e.currentTarget.style.backgroundColor = '#ffffff';
+                  e.currentTarget.style.borderColor = '#6b7280';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(107, 114, 128, 0.1)';
                 }}
                 onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#e5e7eb';
+                  e.currentTarget.style.borderColor = '#d1d5db';
                   e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.backgroundColor = '#fafafa';
                 }}
               />
             </div>
@@ -489,31 +512,30 @@ const CustomerForm: React.FC = () => {
               justifyContent: 'flex-end',
               gap: '1rem',
               paddingTop: '1.5rem',
-              borderTop: '1px solid #f1f5f9'
+              borderTop: '1px solid var(--border-primary)',
+              transition: 'border-color 0.3s ease'
             }}>
               <button
                 type="button"
                 onClick={() => navigate('/customers')}
                 style={{
-                  padding: '1rem 2rem',
-                  backgroundColor: '#f8fafc',
-                  color: '#64748b',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  fontSize: '1rem',
-                  fontWeight: '600',
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-primary)',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
                   cursor: 'pointer',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.2s ease'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f1f5f9';
-                  e.currentTarget.style.borderColor = '#cbd5e1';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                  e.currentTarget.style.color = 'var(--text-primary)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8fafc';
-                  e.currentTarget.style.borderColor = '#e2e8f0';
-                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.color = 'var(--text-secondary)';
                 }}
               >
                 İptal
@@ -522,28 +544,24 @@ const CustomerForm: React.FC = () => {
                 type="submit"
                 disabled={saving}
                 style={{
-                  padding: '1rem 2rem',
-                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                  color: '#ffffff',
+                  padding: '0.75rem 1.5rem',
+                  backgroundColor: saving ? '#9ca3af' : (theme === 'dark' ? '#f9fafb' : '#1f2937'),
+                  color: theme === 'dark' ? '#1f2937' : '#ffffff',
                   border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '1rem',
-                  fontWeight: '600',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
                   cursor: saving ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.3s ease',
-                  opacity: saving ? 0.7 : 1,
-                  boxShadow: '0 8px 25px rgba(37, 99, 235, 0.3)'
+                  transition: 'all 0.2s ease'
                 }}
                 onMouseEnter={(e) => {
                   if (!saving) {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 12px 35px rgba(37, 99, 235, 0.4)';
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? '#e5e7eb' : '#374151';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!saving) {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.3)';
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
                   }
                 }}
               >
@@ -558,3 +576,5 @@ const CustomerForm: React.FC = () => {
 }
 
 export default CustomerForm
+
+

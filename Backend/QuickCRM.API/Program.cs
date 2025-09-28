@@ -1,19 +1,92 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using System.Text.Json;
 using QuickCRM.Application.Services;
 using QuickCRM.Core.Interfaces;
+using QuickCRM.Core.Models;
 using QuickCRM.Infrastructure.Data;
 using QuickCRM.Infrastructure.Repositories;
+using Microsoft.OpenApi.Models;
+using Swashbuckle.AspNetCore.SwaggerUI;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    // NoContentOutputFormatter'ı kaldır - 204 No Content yerine 200 OK döndür
+    options.OutputFormatters.RemoveType<Microsoft.AspNetCore.Mvc.Formatters.HttpNoContentOutputFormatter>();
+})
+.AddJsonOptions(options =>
+{
+    // JSON serialization ayarları
+    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.JsonSerializerOptions.WriteIndented = true;
+});
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "QuickCRM API",
+        Version = "v1",
+        Description = "A comprehensive CRM API for managing customers and business operations",
+        Contact = new OpenApiContact
+        {
+            Name = "QuickCRM Team",
+            Email = "support@quickcrm.com"
+        }
+    });
+    
+    // JWT Authorization için Swagger konfigürasyonu
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+    
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
+
 
 // Health checks
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddDbContext<QuickCRMDbContext>()
+    .AddCheck("database", () => 
+    {
+        using var scope = builder.Services.BuildServiceProvider().CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<QuickCRMDbContext>();
+        return context.Database.CanConnect() ? 
+            Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Database connection is healthy") :
+            Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy("Database connection failed");
+    })
+    .AddCheck("memory", () => 
+    {
+        var memory = GC.GetTotalMemory(false);
+        var threshold = 100 * 1024 * 1024; // 100MB threshold
+        return memory < threshold ? 
+            Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy($"Memory usage is healthy: {memory / 1024 / 1024}MB") :
+            Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Degraded($"Memory usage is high: {memory / 1024 / 1024}MB");
+    });
 
 // Database
 builder.Services.AddDbContext<QuickCRMDbContext>(options =>
@@ -27,33 +100,102 @@ builder.Services.AddDbContext<QuickCRMDbContext>(options =>
 // Repositories
 builder.Services.AddScoped<ICustomerRepository, CustomerRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ICustomerNoteRepository, CustomerNoteRepository>();
+
+// Configuration
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 
 // Services
 builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<ICustomerNoteService, CustomerNoteService>();
 builder.Services.AddScoped<IStatsService, StatsService>();
 
-// Memory Cache
-builder.Services.AddMemoryCache();
+// JWT Services
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
+if (jwtSettings != null)
+{
+    builder.Services.AddSingleton(jwtSettings);
+    builder.Services.AddScoped<IJwtService, JwtService>();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+}
+
+// Memory Cache with configuration
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 1000; // Maximum number of cache entries
+    options.CompactionPercentage = 0.25; // Remove 25% of entries when limit is reached
+});
+
+// Response compression
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    options.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
+
+// Response caching
+builder.Services.AddResponseCaching();
+
+// Rate limiting
+builder.Services.AddScoped<QuickCRM.API.Middleware.RateLimitingMiddleware>();
+
+// JWT Authentication
+if (jwtSettings != null)
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSettings.SecretKey)),
+                ValidateIssuer = true,
+                ValidIssuer = jwtSettings.Issuer,
+                ValidateAudience = true,
+                ValidAudience = jwtSettings.Audience,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.Zero
+            };
+        });
+}
+
+builder.Services.AddAuthorization();
 
 // CORS
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    if (builder.Environment.IsDevelopment())
     {
-        policy.WithOrigins(
-                "http://localhost:3000", 
-                "https://localhost:3000",
-                "http://localhost:5173",
-                "https://localhost:5173",
-                "https://quickcrm.vercel.app",
-                "https://*.vercel.app",
-                "https://quickcrm-app.netlify.app",
-                "https://*.netlify.app"
-              )
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
-    });
+        options.AddPolicy("AllowAll", policy =>
+        {
+            policy.WithOrigins(
+                    "http://localhost:3000", 
+                    "https://localhost:3000",
+                    "http://localhost:5173",
+                    "https://localhost:5173",
+                    "https://quickcrm.vercel.app",
+                    "https://*.vercel.app",
+                    "https://quickcrm-app.netlify.app",
+                    "https://*.netlify.app"
+                  )
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
+    }
+    else
+    {
+        // Production CORS - sadece güvenli origin'ler
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
+        options.AddPolicy("ProductionCors", policy =>
+        {
+            policy.WithOrigins(allowedOrigins)
+                  .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                  .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
+                  .AllowCredentials();
+        });
+    }
 });
 
 var app = builder.Build();
@@ -62,26 +204,103 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "QuickCRM API v1");
+        c.RoutePrefix = "swagger"; // Swagger UI'yi /swagger endpoint'inde göster
+        c.DocumentTitle = "QuickCRM API Documentation";
+        c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
+        c.DefaultModelsExpandDepth(-1);
+        c.DisplayRequestDuration();
+        c.EnableDeepLinking();
+        c.EnableFilter();
+        c.ShowExtensions();
+        c.EnableValidator();
+    });
 }
 else
 {
-    // Production'da da Swagger'ı aktifleştir
+    // Production'da Swagger'ı sadece belirli IP'lerden erişilebilir hale getir
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "QuickCRM API v1");
         c.RoutePrefix = "swagger"; // Swagger UI'yi /swagger endpoint'inde göster
+        c.DocumentTitle = "QuickCRM API Documentation";
+        c.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.None);
+        c.DefaultModelsExpandDepth(-1);
     });
 }
 
+// Security headers
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Add("X-Frame-Options", "DENY");
+    context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+    await next();
+});
+
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+
+// Response compression
+app.UseResponseCompression();
+
+// Response caching
+app.UseResponseCaching();
+
+// Rate limiting
+if (builder.Configuration.GetValue<bool>("RateLimiting:EnableRateLimiting", false))
+{
+    app.UseMiddleware<QuickCRM.API.Middleware.RateLimitingMiddleware>();
+}
+
+// CORS policy selection
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("AllowAll");
+}
+else
+{
+    app.UseCors("ProductionCors");
+}
+
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Health check endpoint
-app.MapHealthChecks("/health");
+// Health check endpoints
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                duration = entry.Value.Duration.TotalMilliseconds
+            }),
+            totalDuration = report.TotalDuration.TotalMilliseconds
+        };
+        await context.Response.WriteAsync(System.Text.Json.JsonSerializer.Serialize(response, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+});
+
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+});
 
 // Database migration and seed data - run in background
 _ = Task.Run(async () =>

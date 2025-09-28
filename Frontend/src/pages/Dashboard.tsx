@@ -1,5 +1,41 @@
-import React, { useState, useEffect } from 'react'
+﻿import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { Link } from 'react-router-dom'
+import { apiRequest } from '../config/api'
+import { useTheme } from '../contexts/ThemeContext'
+import { useSearch } from '../contexts/SearchContext'
+import toast from 'react-hot-toast'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  Filler,
+} from 'chart.js'
+import { Line, Doughnut } from 'react-chartjs-2'
+
+// Chart.js'i kaydet
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+  Filler
+)
+
+// Memoized Chart Components
+const MemoizedLine = memo(Line)
+const MemoizedDoughnut = memo(Doughnut)
 
 interface DashboardStats {
   totalCustomers: number
@@ -18,114 +54,440 @@ interface Customer {
   createdAt: string
 }
 
+interface ChartData {
+  monthlyTrend: {
+    labels: string[]
+    data: number[]
+  }
+  categoryDistribution: {
+    labels: string[]
+    data: number[]
+  }
+}
+
+interface Activity {
+  id: number
+  type: 'created' | 'updated' | 'deleted'
+  customerName: string
+  customerEmail: string
+  timestamp: string
+  user: string
+}
+
 const Dashboard: React.FC = () => {
+  const { theme } = useTheme()
+  const { openSearch } = useSearch()
   const [stats, setStats] = useState<DashboardStats>({
     totalCustomers: 0,
     activeCustomers: 0,
     thisMonthCustomers: 0
   })
   const [recentCustomers, setRecentCustomers] = useState<Customer[]>([])
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [chartData, setChartData] = useState<ChartData>({
+    monthlyTrend: { labels: [], data: [] },
+    categoryDistribution: { labels: [], data: [] }
+  })
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+  const hasFetched = useRef(false)
 
   useEffect(() => {
-    fetchStats()
-    fetchRecentCustomers()
+    if (!hasFetched.current) {
+      hasFetched.current = true
+      fetchDashboardData()
+    }
   }, [])
 
-  const fetchStats = async () => {
-    try {
-      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
-      const response = await fetch(`${apiUrl}/api/stats/dashboard`)
-      if (response.ok) {
-        const data = await response.json()
-        setStats(data)
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
+  const prepareActivities = useCallback((customers: Customer[]) => {
+    // Müşteri verilerinden aktiviteler oluştur
+    const activities: Activity[] = customers
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 10)
+      .map((customer, index) => ({
+        id: index + 1,
+        type: 'created' as const,
+        customerName: `${customer.firstName} ${customer.lastName}`,
+        customerEmail: customer.email,
+        timestamp: customer.createdAt,
+        user: 'Admin' // Gerçek uygulamada kullanıcı bilgisi gelecek
+      }))
+
+    setActivities(activities)
+  }, [])
+
+  const prepareChartData = useCallback((customers: Customer[]) => {
+    // Son 6 ayın verilerini hazırla
+    const last6Months: Array<{ month: string; year: number; count: number }> = []
+    const now = new Date()
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      last6Months.push({
+        month: date.toLocaleDateString('tr-TR', { month: 'short' }),
+        year: date.getFullYear(),
+        count: 0
+      })
+    }
+
+    // Müşteri verilerini aylara göre grupla
+    customers.forEach(customer => {
+      const customerDate = new Date(customer.createdAt)
+      const monthIndex = last6Months.findIndex(month => 
+        month.year === customerDate.getFullYear() && 
+        month.month === customerDate.toLocaleDateString('tr-TR', { month: 'short' })
+      )
+      if (monthIndex !== -1) {
+        last6Months[monthIndex].count++
       }
+    })
+
+    // Kategori dağılımını hazırla (şirket bazında)
+    const companyCounts: { [key: string]: number } = {}
+    customers.forEach(customer => {
+      const company = customer.company || 'Şirket Bilgisi Yok'
+      companyCounts[company] = (companyCounts[company] || 0) + 1
+    })
+
+    const topCompanies = Object.entries(companyCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+
+    setChartData({
+      monthlyTrend: {
+        labels: last6Months.map(m => `${m.month} ${m.year}`),
+        data: last6Months.map(m => m.count)
+      },
+      categoryDistribution: {
+        labels: topCompanies.map(([company]) => company),
+        data: topCompanies.map(([, count]) => count)
+      }
+    })
+  }, [])
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      // Stats endpoint'lerinden verileri çek
+      const [totalCustomers, activeCustomers, thisMonthCustomers, customersData] = await Promise.all([
+        apiRequest('/Stats/customers/total'),
+        apiRequest('/Stats/customers/active'),
+        apiRequest('/Stats/customers/this-month'),
+        apiRequest('/Customers')
+      ])
+
+      setStats({
+        totalCustomers: totalCustomers.count || totalCustomers || 0,
+        activeCustomers: activeCustomers.count || activeCustomers || 0,
+        thisMonthCustomers: thisMonthCustomers.count || thisMonthCustomers || 0
+      })
+
+      // Son 5 müşteriyi al ve tarihe göre sırala
+      const sortedCustomers = customersData
+        .sort((a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5)
+      setRecentCustomers(sortedCustomers)
+
+      // Grafik verilerini hazırla
+      prepareChartData(customersData)
+      
+      // Aktivite verilerini hazırla
+      prepareActivities(customersData)
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      console.error('Error fetching dashboard data:', error)
+      toast.error('Dashboard verileri yüklenirken hata oluştu!')
     } finally {
       setLoading(false)
     }
-  }
+  }, [prepareChartData, prepareActivities])
 
-  const fetchRecentCustomers = async () => {
-    try {
-      const apiUrl = 'https://quickcrm-backend-2024-edh6dkfdhvbsc9f6.westeurope-01.azurewebsites.net'
-      const response = await fetch(`${apiUrl}/api/customers`)
-      if (response.ok) {
-        const data = await response.json()
-        // Son 5 müşteriyi al ve tarihe göre sırala
-        const sortedCustomers = data
-          .sort((a: Customer, b: Customer) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 5)
-        setRecentCustomers(sortedCustomers)
+  // Keyboard shortcuts are handled globally in Layout component
+
+  // Memoized chart options
+  const lineChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      intersect: false,
+      mode: 'index' as const
+    },
+    plugins: {
+      legend: {
+        labels: {
+          color: 'var(--text-primary)',
+          font: { size: 12 }
+        }
       }
-    } catch (error) {
-      console.error('Error fetching recent customers:', error)
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: 'var(--text-secondary)',
+          font: { size: 11 },
+          maxRotation: 45
+        },
+        grid: {
+          color: 'var(--border-primary)',
+          display: false
+        }
+      },
+      y: {
+        ticks: {
+          color: 'var(--text-secondary)',
+          font: { size: 11 }
+        },
+        grid: {
+          color: 'var(--border-primary)',
+          display: false
+        }
+      }
     }
-  }
-  return (
+  }), [theme])
+
+  const doughnutChartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      intersect: false
+    },
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+        labels: {
+          color: 'var(--text-primary)',
+          font: { size: 11 },
+          padding: 15,
+          usePointStyle: true,
+          pointStyle: 'circle' as const
+        }
+      }
+    }
+  }), [theme])
+
+  // Memoized chart data
+  const lineChartData = useMemo(() => ({
+    labels: chartData.monthlyTrend.labels,
+    datasets: [{
+      label: 'Yeni Müşteriler',
+      data: chartData.monthlyTrend.data,
+      borderColor: theme === 'dark' ? '#60a5fa' : '#3b82f6',
+      backgroundColor: theme === 'dark' ? 'rgba(96, 165, 250, 0.1)' : 'rgba(59, 130, 246, 0.1)',
+      borderWidth: 2,
+      fill: true,
+      tension: 0.4
+    }]
+  }), [chartData.monthlyTrend, theme])
+
+  const doughnutChartData = useMemo(() => ({
+    labels: chartData.categoryDistribution.labels,
+    datasets: [{
+      data: chartData.categoryDistribution.data,
+      backgroundColor: [
+        theme === 'dark' ? '#60a5fa' : '#3b82f6',
+        theme === 'dark' ? '#34d399' : '#10b981',
+        theme === 'dark' ? '#fbbf24' : '#f59e0b',
+        theme === 'dark' ? '#f87171' : '#ef4444',
+        theme === 'dark' ? '#a78bfa' : '#8b5cf6'
+      ],
+      borderWidth: 0
+    }]
+  }), [chartData.categoryDistribution, theme])
+
+  // Skeleton Loading Components
+  const SkeletonCard = memo(() => (
+    <div style={{
+      backgroundColor: 'var(--bg-primary)',
+      padding: '1.5rem',
+      borderRadius: '12px',
+      boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+      border: '1px solid var(--border-primary)',
+      animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ 
+          padding: '0.75rem',
+          backgroundColor: 'var(--bg-tertiary)',
+          borderRadius: '8px',
+          marginRight: '1rem',
+          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        }}>
+          <div style={{ 
+            width: '1.25rem', 
+            height: '1.25rem', 
+            backgroundColor: 'var(--text-tertiary)',
+            borderRadius: '4px',
+            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }}></div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ 
+            height: '0.875rem', 
+            backgroundColor: 'var(--text-tertiary)',
+            borderRadius: '4px',
+            marginBottom: '0.5rem',
+            width: '60%',
+            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }}></div>
+          <div style={{ 
+            height: '1.75rem', 
+            backgroundColor: 'var(--text-tertiary)',
+            borderRadius: '4px',
+            width: '40%',
+            animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+          }}></div>
+        </div>
+      </div>
+    </div>
+  ))
+
+  const SkeletonChart = memo(() => (
     <div style={{ 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      minHeight: '100vh',
-      padding: '1rem',
+      backgroundColor: 'var(--bg-primary)',
+      padding: isMobile ? '1rem' : '1.5rem',
+      borderRadius: '12px',
+      boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+      border: '1px solid var(--border-primary)',
+      transition: 'all 0.3s ease',
+      overflow: 'hidden',
       position: 'relative'
     }}>
-      {/* Animated background elements */}
-      <div style={{
-        position: 'absolute',
-        top: '0',
-        left: '0',
-        right: '0',
-        bottom: '0',
-        background: 'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%), radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.2) 0%, transparent 50%)',
-        pointerEvents: 'none'
+      <div style={{ 
+        height: '1.125rem', 
+        backgroundColor: 'var(--text-tertiary)',
+        borderRadius: '4px',
+        marginBottom: '1.5rem',
+        width: '50%',
+        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
       }}></div>
       <div style={{ 
-        maxWidth: '56rem', 
+        height: '200px', 
+        backgroundColor: 'var(--bg-tertiary)',
+        borderRadius: '8px',
+        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          border: `3px solid var(--text-tertiary)`,
+          borderTop: `3px solid transparent`,
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+      </div>
+    </div>
+  ))
+
+  const SkeletonActivity = memo(() => (
+    <div style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      padding: '1rem 0',
+      borderBottom: '1px solid var(--border-primary)'
+    }}>
+      <div style={{
+        width: '2.5rem',
+        height: '2.5rem',
+        backgroundColor: 'var(--text-tertiary)',
+        borderRadius: '50%',
+        marginRight: '1rem',
+        flexShrink: 0,
+        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+      }}></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          height: '0.875rem',
+          backgroundColor: 'var(--text-tertiary)',
+          borderRadius: '4px',
+          marginBottom: '0.25rem',
+          width: '70%',
+          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        }}></div>
+        <div style={{
+          height: '0.875rem',
+          backgroundColor: 'var(--text-tertiary)',
+          borderRadius: '4px',
+          marginBottom: '0.25rem',
+          width: '90%',
+          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        }}></div>
+        <div style={{
+          height: '0.75rem',
+          backgroundColor: 'var(--text-tertiary)',
+          borderRadius: '4px',
+          width: '60%',
+          animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
+        }}></div>
+      </div>
+    </div>
+  ))
+
+  return (
+    <div style={{ 
+      backgroundColor: 'var(--bg-secondary)',
+      minHeight: '100vh',
+      padding: isMobile ? '0.5rem' : '1rem',
+      transition: 'background-color 0.3s ease',
+      animation: 'fadeIn 0.6s ease-out'
+    }}>
+      <div style={{ 
+        maxWidth: '1200px', 
         margin: '0 auto',
-        position: 'relative',
-        zIndex: 1
+        width: '100%'
       }}>
         {/* Header */}
         <div style={{ 
-          marginBottom: '1.5rem',
+          marginBottom: '3rem',
           textAlign: 'center',
-          padding: '2rem 0 1rem 0'
+          padding: '2rem 0'
         }}>
           <div style={{
-            width: '80px',
-            height: '80px',
-            backgroundColor: '#2563eb',
-            borderRadius: '20px',
-            margin: '0 auto 1rem auto',
+            width: '60px',
+            height: '60px',
+            backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+            borderRadius: '12px',
+            margin: '0 auto 1.5rem auto',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 10px 25px rgba(37, 99, 235, 0.3)'
+            transition: 'background-color 0.3s ease'
           }}>
             <span style={{ 
-              color: '#ffffff',
+              color: theme === 'dark' ? '#1f2937' : '#ffffff',
               fontWeight: '700',
-              fontSize: '2rem'
+              fontSize: '1.5rem',
+              transition: 'color 0.3s ease'
             }}>
               Q
             </span>
           </div>
           <h1 style={{ 
-            fontSize: '2.5rem', 
-            fontWeight: '800', 
-            color: '#ffffff',
+            fontSize: '2rem', 
+            fontWeight: '700', 
+            color: 'var(--text-primary)',
             marginBottom: '0.5rem',
-            textShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-            letterSpacing: '-0.02em'
+            letterSpacing: '-0.02em',
+            transition: 'color 0.3s ease'
           }}>
             QuickCRM
           </h1>
           <p style={{ 
-            fontSize: '1.125rem', 
-            color: 'rgba(255, 255, 255, 0.9)',
-            fontWeight: '500',
-            textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
+            fontSize: '1rem', 
+            color: 'var(--text-secondary)',
+            fontWeight: '400',
+            transition: 'color 0.3s ease'
           }}>
             Müşteri yönetim sisteminize hoş geldiniz
           </p>
@@ -134,77 +496,74 @@ const Dashboard: React.FC = () => {
         {/* Stats Cards */}
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '1.5rem',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: isMobile ? '0.75rem' : '1rem',
           marginBottom: '2rem'
         }}>
+          {loading ? (
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
+          ) : (
+            <>
           <Link 
             to="/customers"
             style={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              backgroundColor: 'var(--bg-primary)',
               padding: '1.5rem',
-              borderRadius: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              position: 'relative',
-              overflow: 'hidden',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              borderRadius: '12px',
+              boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+              border: '1px solid var(--border-primary)',
               textDecoration: 'none',
               display: 'block',
-              transition: 'all 0.3s ease',
+              transition: 'all 0.2s ease',
               cursor: 'pointer'
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)';
-            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+                e.currentTarget.style.boxShadow = `0 8px 25px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.15)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              height: '4px',
-              background: 'linear-gradient(90deg, #2563eb, #1d4ed8)'
-            }}></div>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ 
-                padding: '1rem',
-                backgroundColor: '#dbeafe',
-                borderRadius: '12px',
+                padding: '0.75rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
                 marginRight: '1rem',
-                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.15)'
+                transition: 'background-color 0.3s ease'
               }}>
                 <div style={{ 
-                  width: '1.5rem', 
-                  height: '1.5rem', 
-                  backgroundColor: '#2563eb',
-                  borderRadius: '8px'
+                  width: '1.25rem', 
+                  height: '1.25rem', 
+                  backgroundColor: 'var(--text-secondary)',
+                  borderRadius: '4px',
+                  transition: 'background-color 0.3s ease'
                 }}></div>
               </div>
               <div>
                 <p style={{ 
                   fontSize: '0.875rem', 
-                  color: '#64748b',
+                  color: 'var(--text-secondary)',
                   margin: '0 0 0.5rem 0',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  transition: 'color 0.3s ease'
                 }}>
                   Toplam Müşteri
                 </p>
                 <p style={{ 
-                  fontSize: '2rem', 
-                  fontWeight: '800', 
-                  color: '#0f172a',
+                  fontSize: '1.75rem', 
+                  fontWeight: '700', 
+                  color: 'var(--text-primary)',
                   margin: '0',
-                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
+                  transition: 'color 0.3s ease'
                 }}>
                   {loading ? '...' : stats.totalCustomers}
                 </p>
@@ -215,70 +574,59 @@ const Dashboard: React.FC = () => {
           <Link 
             to="/customers?active=true"
             style={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              backgroundColor: 'var(--bg-primary)',
               padding: '1.5rem',
-              borderRadius: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              position: 'relative',
-              overflow: 'hidden',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              borderRadius: '12px',
+              boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+              border: '1px solid var(--border-primary)',
               textDecoration: 'none',
               display: 'block',
-              transition: 'all 0.3s ease',
+              transition: 'all 0.2s ease',
               cursor: 'pointer'
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)';
-            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+                e.currentTarget.style.boxShadow = `0 8px 25px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.15)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              height: '4px',
-              background: 'linear-gradient(90deg, #16a34a, #15803d)'
-            }}></div>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ 
-                padding: '1rem',
-                backgroundColor: '#dcfce7',
-                borderRadius: '12px',
+                padding: '0.75rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
                 marginRight: '1rem',
-                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.15)'
+                transition: 'background-color 0.3s ease'
               }}>
                 <div style={{ 
-                  width: '1.5rem', 
-                  height: '1.5rem', 
-                  backgroundColor: '#16a34a',
-                  borderRadius: '8px'
+                  width: '1.25rem', 
+                  height: '1.25rem', 
+                  backgroundColor: 'var(--text-secondary)',
+                  borderRadius: '4px',
+                  transition: 'background-color 0.3s ease'
                 }}></div>
               </div>
               <div>
                 <p style={{ 
                   fontSize: '0.875rem', 
-                  color: '#64748b',
+                  color: 'var(--text-secondary)',
                   margin: '0 0 0.5rem 0',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  transition: 'color 0.3s ease'
                 }}>
                   Aktif Müşteri
                 </p>
                 <p style={{ 
-                  fontSize: '2rem', 
-                  fontWeight: '800', 
-                  color: '#0f172a',
+                  fontSize: '1.75rem', 
+                  fontWeight: '700', 
+                  color: 'var(--text-primary)',
                   margin: '0',
-                  background: 'linear-gradient(135deg, #16a34a, #15803d)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
+                  transition: 'color 0.3s ease'
                 }}>
                   {loading ? '...' : stats.activeCustomers}
                 </p>
@@ -289,112 +637,581 @@ const Dashboard: React.FC = () => {
           <Link 
             to="/customers?thisMonth=true"
             style={{ 
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              backgroundColor: 'var(--bg-primary)',
               padding: '1.5rem',
-              borderRadius: '20px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              position: 'relative',
-              overflow: 'hidden',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              borderRadius: '12px',
+              boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+              border: '1px solid var(--border-primary)',
               textDecoration: 'none',
               display: 'block',
-              transition: 'all 0.3s ease',
+              transition: 'all 0.2s ease',
               cursor: 'pointer'
             }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-4px)';
-              e.currentTarget.style.boxShadow = '0 12px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.3)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)';
-            }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px) scale(1.02)';
+                e.currentTarget.style.boxShadow = `0 8px 25px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.15)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`;
+                e.currentTarget.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+              }}
           >
-            <div style={{
-              position: 'absolute',
-              top: '0',
-              left: '0',
-              right: '0',
-              height: '4px',
-              background: 'linear-gradient(90deg, #9333ea, #7c3aed)'
-            }}></div>
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <div style={{ 
-                padding: '1rem',
-                backgroundColor: '#f3e8ff',
-                borderRadius: '12px',
+                padding: '0.75rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
                 marginRight: '1rem',
-                boxShadow: '0 4px 12px rgba(147, 51, 234, 0.15)'
+                transition: 'background-color 0.3s ease'
               }}>
                 <div style={{ 
-                  width: '1.5rem', 
-                  height: '1.5rem', 
-                  backgroundColor: '#9333ea',
-                  borderRadius: '8px'
+                  width: '1.25rem', 
+                  height: '1.25rem', 
+                  backgroundColor: 'var(--text-secondary)',
+                  borderRadius: '4px',
+                  transition: 'background-color 0.3s ease'
                 }}></div>
               </div>
               <div>
                 <p style={{ 
                   fontSize: '0.875rem', 
-                  color: '#64748b',
+                  color: 'var(--text-secondary)',
                   margin: '0 0 0.5rem 0',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  transition: 'color 0.3s ease'
                 }}>
                   Bu Ay Eklenen
                 </p>
                 <p style={{ 
-                  fontSize: '2rem', 
-                  fontWeight: '800', 
-                  color: '#0f172a',
+                  fontSize: '1.75rem', 
+                  fontWeight: '700', 
+                  color: 'var(--text-primary)',
                   margin: '0',
-                  background: 'linear-gradient(135deg, #9333ea, #7c3aed)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text'
+                  transition: 'color 0.3s ease'
                 }}>
                   {loading ? '...' : stats.thisMonthCustomers}
                 </p>
               </div>
             </div>
           </Link>
+            </>
+          )}
+        </div>
+
+        {/* Charts Section */}
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(350px, 1fr))',
+          gap: isMobile ? '0.75rem' : '1rem',
+          marginBottom: '2rem',
+          overflow: 'hidden'
+        }}>
+          {loading ? (
+            <>
+              <SkeletonChart />
+              <SkeletonChart />
+            </>
+          ) : (
+            <>
+          {/* Monthly Trend Chart */}
+          <div style={{ 
+            backgroundColor: 'var(--bg-primary)',
+            padding: isMobile ? '1rem' : '1.5rem',
+            borderRadius: '12px',
+            boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+            border: '1px solid var(--border-primary)',
+            transition: 'all 0.3s ease',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <h3 style={{ 
+              fontSize: '1.125rem', 
+              fontWeight: '600', 
+              color: 'var(--text-primary)',
+              margin: '0 0 1.5rem 0',
+              transition: 'color 0.3s ease'
+            }}>
+              📈 Aylık Müşteri Trendi
+            </h3>
+            {loading ? (
+              <div style={{ 
+                height: '200px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: 'var(--text-secondary)',
+                transition: 'color 0.3s ease'
+              }}>
+                Yükleniyor...
+              </div>
+            ) : (
+              <div style={{ 
+                height: '200px', 
+                width: '100%',
+                position: 'relative'
+              }}>
+                <MemoizedLine
+                data={lineChartData}
+                options={lineChartOptions}
+                style={{ 
+                  height: '200px', 
+                  width: '100%',
+                  maxWidth: '100%'
+                }}
+              />
+              </div>
+            )}
+          </div>
+
+          {/* Company Distribution Chart */}
+          <div style={{ 
+            backgroundColor: 'var(--bg-primary)',
+            padding: isMobile ? '1rem' : '1.5rem',
+            borderRadius: '12px',
+            boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+            border: '1px solid var(--border-primary)',
+            transition: 'all 0.3s ease',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <h3 style={{ 
+              fontSize: '1.125rem', 
+              fontWeight: '600', 
+              color: 'var(--text-primary)',
+              margin: '0 0 1.5rem 0',
+              transition: 'color 0.3s ease'
+            }}>
+              🏢 Şirket Dağılımı
+            </h3>
+            {loading ? (
+              <div style={{ 
+                height: '200px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                color: 'var(--text-secondary)',
+                transition: 'color 0.3s ease'
+              }}>
+                Yükleniyor...
+              </div>
+            ) : (
+              <div style={{ 
+                height: '200px', 
+                width: '100%',
+                position: 'relative'
+              }}>
+                <MemoizedDoughnut
+                data={doughnutChartData}
+                options={doughnutChartOptions}
+                style={{ 
+                  height: '200px', 
+                  width: '100%',
+                  maxWidth: '100%'
+                }}
+              />
+              </div>
+            )}
+          </div>
+            </>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{ 
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '12px',
+          boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+          border: '1px solid var(--border-primary)',
+          padding: '1.5rem',
+          marginBottom: '2rem',
+          transition: 'all 0.3s ease'
+        }}>
+          <h3 style={{ 
+            fontSize: '1.125rem', 
+            fontWeight: '600', 
+            color: 'var(--text-primary)',
+            margin: '0 0 1.5rem 0',
+            transition: 'color 0.3s ease'
+          }}>
+            ⚡ Hızlı Aksiyonlar
+          </h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: isMobile ? '0.75rem' : '1rem'
+          }}>
+            <Link 
+              to="/customers/new" 
+              style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                padding: '1rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: '1px solid var(--border-primary)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme === 'dark' ? '#374151' : '#f3f4f6';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div style={{ 
+                width: '2.5rem',
+                height: '2.5rem',
+                backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '0.75rem',
+                transition: 'background-color 0.3s ease'
+              }}>
+                <span style={{ 
+                  color: theme === 'dark' ? '#1f2937' : '#ffffff',
+                  fontSize: '1.25rem',
+                  fontWeight: '700',
+                  transition: 'color 0.3s ease'
+                }}>
+                  +
+                </span>
+              </div>
+              <div>
+                <div style={{ 
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'var(--text-primary)',
+                  marginBottom: '0.25rem',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Yeni Müşteri
+                </div>
+                <div style={{ 
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Hızlı ekleme
+                </div>
+              </div>
+            </Link>
+
+            <Link 
+              to="/customers" 
+              style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                padding: '1rem',
+                backgroundColor: 'var(--bg-tertiary)',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                transition: 'all 0.2s ease',
+                border: '1px solid var(--border-primary)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = theme === 'dark' ? '#374151' : '#f3f4f6';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div style={{ 
+                width: '2.5rem',
+                height: '2.5rem',
+                backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '0.75rem',
+                transition: 'background-color 0.3s ease'
+              }}>
+                <span style={{ 
+                  color: theme === 'dark' ? '#1f2937' : '#ffffff',
+                  fontSize: '1rem',
+                  transition: 'color 0.3s ease'
+                }}>
+                  👥
+                </span>
+              </div>
+              <div>
+                <div style={{ 
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'var(--text-primary)',
+                  marginBottom: '0.25rem',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Tüm Müşteriler
+                </div>
+                <div style={{ 
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Listeyi görüntüle
+                </div>
+              </div>
+            </Link>
+
+            <div style={{ 
+              display: 'flex',
+              alignItems: 'center',
+              padding: '1rem',
+              backgroundColor: 'var(--bg-tertiary)',
+              borderRadius: '8px',
+              border: '1px solid var(--border-primary)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#374151' : '#f3f4f6';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+            onClick={() => {
+              // Hızlı arama modal'ı açılacak (gelecekte implement edilecek)
+              alert('Hızlı arama özelliği yakında eklenecek!')
+            }}
+            >
+              <div style={{ 
+                width: '2.5rem',
+                height: '2.5rem',
+                backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginRight: '0.75rem',
+                transition: 'background-color 0.3s ease'
+              }}>
+                <span style={{ 
+                  color: theme === 'dark' ? '#1f2937' : '#ffffff',
+                  fontSize: '1rem',
+                  transition: 'color 0.3s ease'
+                }}>
+                  🔍
+                </span>
+              </div>
+              <div>
+                <div style={{ 
+                  fontSize: '0.875rem',
+                  fontWeight: '600',
+                  color: 'var(--text-primary)',
+                  marginBottom: '0.25rem',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Hızlı Arama
+                </div>
+                <div style={{ 
+                  fontSize: '0.75rem',
+                  color: 'var(--text-secondary)',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Yakında...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Activities Timeline */}
+        <div style={{ 
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '12px',
+          boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+          border: '1px solid var(--border-primary)',
+          overflow: 'hidden',
+          marginBottom: '2rem',
+          transition: 'all 0.3s ease'
+        }}>
+          <div style={{ 
+            padding: '1.5rem',
+            borderBottom: '1px solid var(--border-primary)',
+            backgroundColor: 'var(--bg-tertiary)',
+            transition: 'all 0.3s ease'
+          }}>
+            <h2 style={{ 
+              fontSize: '1.125rem', 
+              fontWeight: '600', 
+              color: 'var(--text-primary)',
+              margin: '0',
+              transition: 'color 0.3s ease'
+            }}>
+              📋 Son Aktiviteler
+            </h2>
+          </div>
+          <div style={{ padding: '1.5rem' }}>
+            {loading ? (
+              <div>
+                <SkeletonActivity />
+                <SkeletonActivity />
+                <SkeletonActivity />
+                <SkeletonActivity />
+                <SkeletonActivity />
+              </div>
+            ) : activities.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                <div style={{ 
+                  width: '80px', 
+                  height: '80px', 
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderRadius: '50%',
+                  margin: '0 auto 1.5rem auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background-color 0.3s ease'
+                }}>
+                  <span style={{ 
+                    fontSize: '2rem',
+                    transition: 'color 0.3s ease'
+                  }}>
+                    📝
+                  </span>
+                </div>
+                <h3 style={{ 
+                  fontSize: '1.125rem', 
+                  fontWeight: '600', 
+                  color: 'var(--text-primary)',
+                  margin: '0 0 0.5rem 0',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Henüz aktivite yok
+                </h3>
+                <p style={{ 
+                  fontSize: '0.875rem', 
+                  color: 'var(--text-secondary)',
+                  margin: '0',
+                  transition: 'color 0.3s ease'
+                }}>
+                  Müşteri işlemleri burada görünecek
+                </p>
+              </div>
+            ) : (
+              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                {activities.map((activity, index) => (
+                  <div key={activity.id} style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    padding: '1rem 0',
+                    borderBottom: index < activities.length - 1 ? '1px solid var(--border-primary)' : 'none',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    {/* Timeline Icon */}
+                    <div style={{
+                      width: '2.5rem',
+                      height: '2.5rem',
+                      backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginRight: '1rem',
+                      flexShrink: 0,
+                      transition: 'background-color 0.3s ease'
+                    }}>
+                      <span style={{
+                        color: theme === 'dark' ? '#1f2937' : '#ffffff',
+                        fontSize: '1rem',
+                        transition: 'color 0.3s ease'
+                      }}>
+                        {activity.type === 'created' ? '➕' : activity.type === 'updated' ? '✏️' : '🗑️'}
+                      </span>
+                    </div>
+
+                    {/* Timeline Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        color: 'var(--text-primary)',
+                        marginBottom: '0.25rem',
+                        transition: 'color 0.3s ease'
+                      }}>
+                        {activity.type === 'created' ? 'Yeni müşteri eklendi' : 
+                         activity.type === 'updated' ? 'Müşteri güncellendi' : 'Müşteri silindi'}
+                      </div>
+                      <div style={{
+                        fontSize: '0.875rem',
+                        color: 'var(--text-secondary)',
+                        marginBottom: '0.25rem',
+                        transition: 'color 0.3s ease'
+                      }}>
+                        <strong>{activity.customerName}</strong> ({activity.customerEmail})
+                      </div>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--text-tertiary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        transition: 'color 0.3s ease'
+                      }}>
+                        <span>👤</span>
+                        {activity.user}
+                        <span style={{ margin: '0 0.25rem' }}>•</span>
+                        <span>🕒</span>
+                        {new Date(activity.timestamp).toLocaleString('tr-TR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Recent Customers */}
         <div style={{ 
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderRadius: '24px',
-          boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.2)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '12px',
+          boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+          border: '1px solid var(--border-primary)',
           overflow: 'hidden',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)'
+          transition: 'all 0.3s ease'
         }}>
           <div style={{ 
             padding: '1.5rem',
-            borderBottom: '1px solid #f1f5f9',
-            background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)'
+            borderBottom: '1px solid var(--border-primary)',
+            backgroundColor: 'var(--bg-tertiary)',
+            transition: 'all 0.3s ease'
           }}>
             <h2 style={{ 
-              fontSize: '1.25rem', 
-              fontWeight: '700', 
-              color: '#0f172a',
+              fontSize: '1.125rem', 
+              fontWeight: '600', 
+              color: 'var(--text-primary)',
               margin: '0',
-              background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text'
+              transition: 'color 0.3s ease'
             }}>
               Son Eklenen Müşteriler
             </h2>
           </div>
-          <div style={{ padding: '2rem' }}>
+          <div style={{ padding: '1.5rem' }}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                 <div style={{ 
-                  fontSize: '1.125rem',
-                  color: '#4b5563'
+                  fontSize: '1rem',
+                  color: 'var(--text-secondary)',
+                  transition: 'color 0.3s ease'
                 }}>
                   Yükleniyor...
                 </div>
@@ -402,50 +1219,54 @@ const Dashboard: React.FC = () => {
             ) : recentCustomers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                 <div style={{ 
-                  width: '120px', 
-                  height: '120px', 
-                  background: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)',
+                  width: '80px', 
+                  height: '80px', 
+                  backgroundColor: 'var(--bg-tertiary)',
                   borderRadius: '50%',
                   margin: '0 auto 1.5rem auto',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+                  transition: 'background-color 0.3s ease'
                 }}>
                   <div style={{ 
-                    width: '3rem', 
-                    height: '3rem', 
-                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                    borderRadius: '12px',
+                    width: '2rem', 
+                    height: '2rem', 
+                    backgroundColor: 'var(--text-secondary)',
+                    borderRadius: '8px',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    transition: 'background-color 0.3s ease'
                   }}>
                     <span style={{ 
-                      color: '#ffffff',
-                      fontSize: '1.5rem',
-                      fontWeight: '700'
+                      color: 'var(--bg-primary)',
+                      fontSize: '1rem',
+                      fontWeight: '700',
+                      transition: 'color 0.3s ease'
                     }}>
                       +
                     </span>
                   </div>
                 </div>
                 <h3 style={{ 
-                  fontSize: '1.25rem', 
-                  fontWeight: '700', 
-                  color: '#0f172a',
-                  margin: '0 0 0.5rem 0'
+                  fontSize: '1.125rem', 
+                  fontWeight: '600', 
+                  color: 'var(--text-primary)',
+                  margin: '0 0 0.5rem 0',
+                  transition: 'color 0.3s ease'
                 }}>
                   Henüz müşteri yok
                 </h3>
                 <p style={{ 
-                  fontSize: '1rem', 
-                  color: '#64748b',
+                  fontSize: '0.875rem', 
+                  color: 'var(--text-secondary)',
                   margin: '0 0 2rem 0',
                   maxWidth: '400px',
                   marginLeft: 'auto',
                   marginRight: 'auto',
-                  lineHeight: '1.6'
+                  lineHeight: '1.6',
+                  transition: 'color 0.3s ease'
                 }}>
                   İlk müşterinizi ekleyerek QuickCRM'yi kullanmaya başlayın. 
                   Müşteri bilgilerini kolayca yönetin ve takip edin.
@@ -455,39 +1276,38 @@ const Dashboard: React.FC = () => {
                   style={{ 
                     display: 'inline-flex',
                     alignItems: 'center',
-                    padding: '1rem 2rem',
-                    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                    color: '#ffffff',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    borderRadius: '12px',
+                    padding: '0.75rem 1.5rem',
+                    backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                    color: theme === 'dark' ? '#1f2937' : '#ffffff',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    borderRadius: '8px',
                     textDecoration: 'none',
-                    boxShadow: '0 8px 25px rgba(37, 99, 235, 0.3)',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.2s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 12px 35px rgba(37, 99, 235, 0.4)';
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? '#e5e7eb' : '#374151';
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(37, 99, 235, 0.3)';
+                    e.currentTarget.style.backgroundColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
                   }}
                 >
                   <div style={{ 
-                    width: '1.25rem', 
-                    height: '1.25rem', 
-                    backgroundColor: '#ffffff',
-                    borderRadius: '6px',
-                    marginRight: '0.75rem',
+                    width: '1rem', 
+                    height: '1rem', 
+                    backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff',
+                    borderRadius: '4px',
+                    marginRight: '0.5rem',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    transition: 'background-color 0.3s ease'
                   }}>
                     <span style={{ 
-                      color: '#2563eb',
-                      fontSize: '0.875rem',
-                      fontWeight: '700'
+                      color: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                      fontSize: '0.75rem',
+                      fontWeight: '700',
+                      transition: 'color 0.3s ease'
                     }}>
                       +
                     </span>
@@ -502,11 +1322,11 @@ const Dashboard: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     padding: '1rem',
-                    borderBottom: '1px solid #f1f5f9',
-                    transition: 'all 0.3s ease'
+                    borderBottom: '1px solid var(--border-primary)',
+                    transition: 'all 0.2s ease'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = 'transparent';
@@ -514,44 +1334,48 @@ const Dashboard: React.FC = () => {
                     <div style={{
                       width: '2.5rem',
                       height: '2.5rem',
-                      backgroundColor: customer.isActive ? '#dbeafe' : '#fee2e2',
-                      borderRadius: '12px',
+                      backgroundColor: 'var(--bg-tertiary)',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       marginRight: '1rem',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                      transition: 'background-color 0.3s ease'
                     }}>
                       <span style={{
-                        fontSize: '1rem',
-                        fontWeight: '700',
-                        color: customer.isActive ? '#2563eb' : '#dc2626'
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        color: 'var(--text-secondary)',
+                        transition: 'color 0.3s ease'
                       }}>
                         {customer.firstName.charAt(0)}{customer.lastName.charAt(0)}
                       </span>
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{
-                        fontSize: '1rem',
-                        fontWeight: '700',
-                        color: '#111827',
-                        marginBottom: '0.25rem'
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        color: 'var(--text-primary)',
+                        marginBottom: '0.25rem',
+                        transition: 'color 0.3s ease'
                       }}>
                         {customer.firstName} {customer.lastName}
                       </div>
                       <div style={{
-                        fontSize: '0.875rem',
-                        color: '#6b7280',
-                        marginBottom: '0.25rem'
+                        fontSize: '0.75rem',
+                        color: 'var(--text-secondary)',
+                        marginBottom: '0.25rem',
+                        transition: 'color 0.3s ease'
                       }}>
                         {customer.email}
                       </div>
                       <div style={{
                         fontSize: '0.75rem',
-                        color: '#9ca3af',
+                        color: 'var(--text-tertiary)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem'
+                        gap: '0.5rem',
+                        transition: 'color 0.3s ease'
                       }}>
                         <span>📅</span>
                         {new Date(customer.createdAt).toLocaleDateString('tr-TR')}
@@ -560,9 +1384,9 @@ const Dashboard: React.FC = () => {
                           alignItems: 'center',
                           padding: '0.25rem 0.5rem',
                           fontSize: '0.625rem',
-                          fontWeight: '700',
-                          borderRadius: '8px',
-                          backgroundColor: customer.isActive ? '#dcfce7' : '#fee2e2',
+                          fontWeight: '500',
+                          borderRadius: '4px',
+                          backgroundColor: customer.isActive ? '#f0fdf4' : '#fef2f2',
                           color: customer.isActive ? '#166534' : '#991b1b',
                           marginLeft: '0.5rem'
                         }}>
@@ -575,8 +1399,9 @@ const Dashboard: React.FC = () => {
                 <div style={{
                   textAlign: 'center',
                   padding: '1.5rem 0 0 0',
-                  borderTop: '1px solid #f1f5f9',
-                  marginTop: '1rem'
+                  borderTop: '1px solid var(--border-primary)',
+                  marginTop: '1rem',
+                  transition: 'border-color 0.3s ease'
                 }}>
                   <Link 
                     to="/customers" 
@@ -584,22 +1409,19 @@ const Dashboard: React.FC = () => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       padding: '0.75rem 1.5rem',
-                      background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                      color: '#ffffff',
+                      backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                      color: theme === 'dark' ? '#1f2937' : '#ffffff',
                       fontSize: '0.875rem',
-                      fontWeight: '600',
-                      borderRadius: '10px',
+                      fontWeight: '500',
+                      borderRadius: '8px',
                       textDecoration: 'none',
-                      boxShadow: '0 4px 15px rgba(37, 99, 235, 0.3)',
-                      transition: 'all 0.3s ease'
+                      transition: 'all 0.2s ease'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(37, 99, 235, 0.4)';
+                      e.currentTarget.style.backgroundColor = theme === 'dark' ? '#e5e7eb' : '#374151';
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(37, 99, 235, 0.3)';
+                      e.currentTarget.style.backgroundColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
                     }}
                   >
                     Tüm Müşterileri Görüntüle
@@ -615,3 +1437,4 @@ const Dashboard: React.FC = () => {
 }
 
 export default Dashboard
+

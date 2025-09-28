@@ -111,3 +111,5 @@ az webapp log tail --name your-app-name --resource-group your-resource-group
 # Local logs
 dotnet run --project QuickCRM.API --environment Production --verbosity detailed
 ```
+
+

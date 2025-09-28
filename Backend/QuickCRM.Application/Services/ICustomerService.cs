@@ -15,5 +15,11 @@ namespace QuickCRM.Application.Services
         Task<int> GetCustomerCountAsync();
         Task<int> GetActiveCustomerCountAsync();
         Task<int> GetThisMonthCustomerCountAsync();
+        
+        // Customer Note methods
+        Task<IEnumerable<CustomerNoteDto>> GetCustomerNotesAsync(int customerId);
+        Task<CustomerNoteDto> AddCustomerNoteAsync(CreateCustomerNoteDto createCustomerNoteDto);
+        Task<CustomerNoteDto> AddAdminNoteAsync(int customerId, string content);
+        Task<CustomerNoteDto> AddCustomerNoteAsync(int customerId, string content);
     }
 }

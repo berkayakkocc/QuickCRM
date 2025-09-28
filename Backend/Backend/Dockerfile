@@ -39,3 +39,5 @@ EXPOSE 80
 
 # Entry point
 ENTRYPOINT ["dotnet", "QuickCRM.API.dll"]
+
+

@@ -1,0 +1,575 @@
+﻿import React, { useState, useEffect, useMemo } from 'react'
+import { Link, useLocation } from 'react-router-dom'
+import { apiRequest } from '../config/api'
+import { useTheme } from '../contexts/ThemeContext'
+import { useSearch } from '../contexts/SearchContext'
+import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts'
+import AdvancedFilters from '../components/AdvancedFilters'
+
+interface Customer {
+  id: number
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  company?: string
+  isActive: boolean
+  createdAt: string
+}
+
+interface FilterOptions {
+  dateRange: {
+    start: string;
+    end: string;
+  };
+  status: 'all' | 'active' | 'inactive';
+  company: string;
+  searchTerm: string;
+  sortBy: 'name' | 'email' | 'createdAt' | 'company';
+  sortOrder: 'asc' | 'desc';
+}
+
+const Customers: React.FC = () => {
+  const { theme } = useTheme()
+  const { openSearch } = useSearch()
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showActiveOnly, setShowActiveOnly] = useState(false)
+  const [showThisMonthOnly, setShowThisMonthOnly] = useState(false)
+  const [filters, setFilters] = useState<FilterOptions>({
+    dateRange: { start: '', end: '' },
+    status: 'all',
+    company: '',
+    searchTerm: '',
+    sortBy: 'createdAt',
+    sortOrder: 'desc'
+  })
+  const location = useLocation()
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onNewCustomer: () => {
+      console.log('Customers: New customer shortcut triggered');
+      window.location.href = '/customers/new';
+    },
+    onSearch: () => {
+      console.log('Customers: Search shortcut triggered');
+      openSearch();
+    }
+  });
+
+  useEffect(() => {
+    // URL'den filtre parametrelerini kontrol et
+    const urlParams = new URLSearchParams(location.search)
+    const activeFilter = urlParams.get('active')
+    const thisMonthFilter = urlParams.get('thisMonth')
+    
+    setShowActiveOnly(activeFilter === 'true')
+    setShowThisMonthOnly(thisMonthFilter === 'true')
+    
+    fetchCustomers()
+  }, [location.search])
+
+  const fetchCustomers = async () => {
+    try {
+      const data = await apiRequest('/Customers')
+      console.log('Customer Data:', data)
+      setCustomers(data)
+    } catch (error) {
+      console.error('Error fetching customers:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Bu mÃ¼ÅŸteriyi silmek istediÄŸinizden emin misiniz?')) {
+      return
+    }
+
+    try {
+      await apiRequest(`/Customers/${id}`, {
+        method: 'DELETE',
+      })
+      setCustomers(customers.filter(c => c.id !== id))
+    } catch (error) {
+      console.error('Error deleting customer:', error)
+    }
+  }
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    onNewCustomer: () => {
+      window.location.href = '/customers/new';
+    },
+    onSearch: openSearch
+  });
+
+  // Advanced filtering with memoization
+  const filteredCustomers = useMemo(() => {
+    return customers.filter(customer => {
+      // Search term filter
+      if (filters.searchTerm) {
+        const searchLower = filters.searchTerm.toLowerCase()
+        const matchesSearch = customer.firstName.toLowerCase().includes(searchLower) ||
+                             customer.lastName.toLowerCase().includes(searchLower) ||
+                             customer.email.toLowerCase().includes(searchLower) ||
+                             (customer.company && customer.company.toLowerCase().includes(searchLower))
+        if (!matchesSearch) return false
+      }
+
+      // Status filter
+      if (filters.status !== 'all') {
+        if (filters.status === 'active' && !customer.isActive) return false
+        if (filters.status === 'inactive' && customer.isActive) return false
+      }
+
+      // Company filter
+      if (filters.company && customer.company !== filters.company) {
+        return false
+      }
+
+      // Date range filter
+      if (filters.dateRange.start || filters.dateRange.end) {
+        const customerDate = new Date(customer.createdAt)
+        const startDate = filters.dateRange.start ? new Date(filters.dateRange.start) : null
+        const endDate = filters.dateRange.end ? new Date(filters.dateRange.end) : null
+
+        if (startDate && customerDate < startDate) return false
+        if (endDate && customerDate > endDate) return false
+      }
+
+      // Legacy filters for backward compatibility
+      if (showActiveOnly && !customer.isActive) return false
+      if (showThisMonthOnly) {
+        const customerDate = new Date(customer.createdAt)
+        const currentDate = new Date()
+        const isThisMonth = customerDate.getMonth() === currentDate.getMonth() && 
+                           customerDate.getFullYear() === currentDate.getFullYear()
+        if (!isThisMonth) return false
+      }
+
+      return true
+    }).sort((a, b) => {
+      // Sorting logic
+      let aValue: any, bValue: any
+
+      switch (filters.sortBy) {
+        case 'name':
+          aValue = `${a.firstName} ${a.lastName}`.toLowerCase()
+          bValue = `${b.firstName} ${b.lastName}`.toLowerCase()
+          break
+        case 'email':
+          aValue = a.email.toLowerCase()
+          bValue = b.email.toLowerCase()
+          break
+        case 'company':
+          aValue = (a.company || '').toLowerCase()
+          bValue = (b.company || '').toLowerCase()
+          break
+        case 'createdAt':
+        default:
+          aValue = new Date(a.createdAt).getTime()
+          bValue = new Date(b.createdAt).getTime()
+          break
+      }
+
+      if (filters.sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0
+      }
+    })
+  }, [customers, filters, showActiveOnly, showThisMonthOnly])
+
+  // Filter handlers
+  const handleFiltersChange = (newFilters: FilterOptions) => {
+    setFilters(newFilters)
+  }
+
+  const handleClearFilters = () => {
+    setFilters({
+      dateRange: { start: '', end: '' },
+      status: 'all',
+      company: '',
+      searchTerm: '',
+      sortBy: 'createdAt',
+      sortOrder: 'desc'
+    })
+  }
+
+  return (
+    <div style={{ 
+      backgroundColor: 'var(--bg-secondary)',
+      minHeight: '100vh',
+      padding: '2rem 1rem',
+      transition: 'background-color 0.3s ease'
+    }}>
+      <div style={{ 
+        maxWidth: '64rem', 
+        margin: '0 auto'
+      }}>
+        {/* Header */}
+        <div style={{ 
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+          padding: '0 0 1rem 0'
+        }}>
+          <div>
+            <h1 style={{ 
+              fontSize: '1.875rem', 
+              fontWeight: '700', 
+              color: 'var(--text-primary)',
+              margin: '0 0 0.5rem 0',
+              letterSpacing: '-0.02em',
+              transition: 'color 0.3s ease'
+            }}>
+              {showActiveOnly ? 'Aktif MÃ¼ÅŸteriler' : showThisMonthOnly ? 'Bu Ay Eklenen MÃ¼ÅŸteriler' : 'MÃ¼ÅŸteriler'}
+            </h1>
+            <p style={{
+              fontSize: '1rem',
+              color: 'var(--text-secondary)',
+              fontWeight: '400',
+              margin: '0',
+              transition: 'color 0.3s ease'
+            }}>
+              {showActiveOnly ? 'Sadece aktif mÃ¼ÅŸterileri gÃ¶rÃ¼ntÃ¼lÃ¼yorsunuz' : 
+               showThisMonthOnly ? 'Bu ay eklenen mÃ¼ÅŸterileri gÃ¶rÃ¼ntÃ¼lÃ¼yorsunuz' : 
+               'MÃ¼ÅŸteri bilgilerinizi yÃ¶netin'}
+            </p>
+          </div>
+          <Link
+            to="/customers/new"
+            style={{ 
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: theme === 'dark' ? '#f9fafb' : '#1f2937',
+              color: theme === 'dark' ? '#1f2937' : '#ffffff',
+              borderRadius: '8px',
+              textDecoration: 'none',
+              fontWeight: '500',
+              transition: 'all 0.2s ease',
+              fontSize: '0.875rem'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#e5e7eb' : '#374151';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
+            }}
+          >
+            <div style={{
+              width: '1rem',
+              height: '1rem',
+              backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff',
+              borderRadius: '4px',
+              marginRight: '0.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background-color 0.3s ease'
+            }}>
+              <span style={{ 
+                color: theme === 'dark' ? '#f9fafb' : '#1f2937',
+                fontSize: '0.75rem',
+                fontWeight: '700',
+                transition: 'color 0.3s ease'
+              }}>
+                +
+              </span>
+            </div>
+            Yeni MÃ¼ÅŸteri
+          </Link>
+        </div>
+
+        {/* Advanced Filters */}
+        <AdvancedFilters
+          onFiltersChange={handleFiltersChange}
+          onClearFilters={handleClearFilters}
+          totalCount={customers.length}
+          filteredCount={filteredCustomers.length}
+          customers={customers}
+        />
+
+
+        {/* Customers Table */}
+        <div style={{ 
+          backgroundColor: 'var(--bg-primary)',
+          borderRadius: '12px',
+          boxShadow: `0 1px 3px ${theme === 'dark' ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.05)'}`,
+          border: '1px solid var(--border-primary)',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease'
+        }}>
+          {loading ? (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '3rem',
+              fontSize: '1.125rem',
+              color: 'var(--text-secondary)',
+              transition: 'color 0.3s ease'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                border: '4px solid var(--border-primary)',
+                borderTop: '4px solid var(--text-primary)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                margin: '0 auto 1rem auto',
+                transition: 'border-color 0.3s ease'
+              }}></div>
+              MÃ¼ÅŸteriler yÃ¼kleniyor...
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '3rem',
+              color: 'var(--text-secondary)',
+              fontSize: '1.125rem',
+              transition: 'color 0.3s ease'
+            }}>
+              {filters.searchTerm ? 'Arama kriterlerine uygun mÃ¼ÅŸteri bulunamadÄ±.' : 'HenÃ¼z mÃ¼ÅŸteri eklenmemiÅŸ.'}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ 
+                width: '100%',
+                borderCollapse: 'collapse'
+              }}>
+                <thead style={{ 
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderBottom: '1px solid var(--border-primary)',
+                  transition: 'all 0.3s ease'
+                }}>
+                  <tr>
+                    <th style={{ 
+                      padding: '1rem 1.5rem',
+                      textAlign: 'left',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-secondary)',
+                      transition: 'color 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      MÃ¼ÅŸteri
+                    </th>
+                    <th style={{ 
+                      padding: '1rem 1.5rem',
+                      textAlign: 'left',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-secondary)',
+                      transition: 'color 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Ä°letiÅŸim
+                    </th>
+                    <th style={{ 
+                      padding: '1rem 1.5rem',
+                      textAlign: 'left',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-secondary)',
+                      transition: 'color 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Durum
+                    </th>
+                    <th style={{ 
+                      padding: '1rem 1.5rem',
+                      textAlign: 'left',
+                      fontSize: '0.75rem',
+                      fontWeight: '600',
+                      color: 'var(--text-secondary)',
+                      transition: 'color 0.3s ease',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Ä°ÅŸlemler
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCustomers.map((customer) => (
+                    <tr key={customer.id} style={{ 
+                      borderBottom: '1px solid var(--border-primary)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}>
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <div style={{
+                            width: '2.5rem',
+                            height: '2.5rem',
+                            backgroundColor: 'var(--bg-tertiary)',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginRight: '0.75rem',
+                            transition: 'background-color 0.3s ease'
+                          }}>
+                            <span style={{
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              color: 'var(--text-secondary)',
+                              transition: 'color 0.3s ease'
+                            }}>
+                              {customer.firstName.charAt(0)}{customer.lastName.charAt(0)}
+                            </span>
+                          </div>
+                          <div>
+                            <div style={{ 
+                              fontSize: '0.875rem',
+                              fontWeight: '600',
+                              color: 'var(--text-primary)',
+                              marginBottom: '0.25rem',
+                              transition: 'color 0.3s ease'
+                            }}>
+                              {customer.firstName} {customer.lastName}
+                            </div>
+                            <div style={{ 
+                              fontSize: '0.75rem',
+                              color: 'var(--text-secondary)',
+                              transition: 'color 0.3s ease'
+                            }}>
+                              {customer.company || 'Åirket belirtilmemiÅŸ'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <div style={{ 
+                          fontSize: '0.875rem',
+                          color: 'var(--text-primary)',
+                          marginBottom: '0.25rem',
+                          fontWeight: '500',
+                          transition: 'color 0.3s ease'
+                        }}>
+                          {customer.email}
+                        </div>
+                        {customer.phone && (
+                          <div style={{ 
+                            fontSize: '0.75rem',
+                            color: 'var(--text-secondary)',
+                            transition: 'color 0.3s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem'
+                          }}>
+                            <span>ğŸ“</span>
+                            {customer.phone}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '0.25rem 0.75rem',
+                          fontSize: '0.75rem',
+                          fontWeight: '500',
+                          borderRadius: '6px',
+                          backgroundColor: customer.isActive ? '#f0fdf4' : '#fef2f2',
+                          color: customer.isActive ? '#166534' : '#991b1b',
+                          gap: '0.25rem'
+                        }}>
+                          <div style={{
+                            width: '4px',
+                            height: '4px',
+                            backgroundColor: customer.isActive ? '#16a34a' : '#dc2626',
+                            borderRadius: '50%'
+                          }}></div>
+                          {customer.isActive ? 'Aktif' : 'Pasif'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <Link
+                            to={`/customers/edit/${customer.id}`}
+                            style={{ 
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '2rem',
+                              height: '2rem',
+                              backgroundColor: 'var(--bg-tertiary)',
+                              color: 'var(--text-secondary)',
+                              textDecoration: 'none',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-primary)';
+                              e.currentTarget.style.color = 'var(--text-primary)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                              e.currentTarget.style.color = 'var(--text-secondary)';
+                            }}
+                          >
+                            âœï¸
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(customer.id)}
+                            style={{ 
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '2rem',
+                              height: '2rem',
+                              backgroundColor: '#fef2f2',
+                              color: '#dc2626',
+                              border: 'none',
+                              cursor: 'pointer',
+                              borderRadius: '6px',
+                              fontSize: '0.875rem',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fee2e2';
+                              e.currentTarget.style.color = '#b91c1c';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#fef2f2';
+                              e.currentTarget.style.color = '#dc2626';
+                            }}
+                          >
+                            ğŸ—‘ï¸
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+export default Customers

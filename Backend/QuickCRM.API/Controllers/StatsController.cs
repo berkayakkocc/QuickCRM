@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using QuickCRM.Application.Services;
 
 namespace QuickCRM.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize] // Tüm endpoint'ler için authentication gerekli
     public class StatsController : ControllerBase
     {
         private readonly IStatsService _statsService;

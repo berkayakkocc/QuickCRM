@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using QuickCRM.Application.DTOs;
 using QuickCRM.Application.Services;
+using System.Text.Json;
 
 namespace QuickCRM.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize] // Tüm endpoint'ler için authentication gerekli
     public class CustomersController : ControllerBase
     {
         private readonly ICustomerService _customerService;
@@ -47,23 +50,44 @@ namespace QuickCRM.API.Controllers
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateCustomer(int id, UpdateCustomerDto updateCustomerDto)
+        public async Task<ActionResult<CustomerDto>> UpdateCustomer(int id, UpdateCustomerDto updateCustomerDto)
         {
             if (id != updateCustomerDto.Id)
                 return BadRequest("ID mismatch");
 
             try
             {
-                await _customerService.UpdateCustomerAsync(updateCustomerDto);
-                return NoContent();
+                var updatedCustomer = await _customerService.UpdateCustomerAsync(updateCustomerDto);
+                
+                // JSON serialization debug
+                var jsonString = JsonSerializer.Serialize(updatedCustomer, new JsonSerializerOptions 
+                { 
+                    WriteIndented = true 
+                });
+                Console.WriteLine($"Controller - Updated Customer JSON: {jsonString}");
+                
+                // Her zaman 200 OK + JSON döndür
+                return Ok(updatedCustomer);
             }
             catch (ArgumentException ex)
             {
+                Console.WriteLine($"Controller - ArgumentException: {ex.Message}");
                 return BadRequest(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.WriteLine($"Controller - InvalidOperationException: {ex.Message}");
+                return NotFound(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Controller - Unexpected error: {ex.Message}");
+                return StatusCode(500, "An unexpected error occurred");
             }
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin,Manager")] // Sadece Admin ve Manager silebilir
         public async Task<IActionResult> DeleteCustomer(int id)
         {
             try
