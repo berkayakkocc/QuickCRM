@@ -164,37 +164,13 @@ builder.Services.AddAuthorization();
 // CORS
 builder.Services.AddCors(options =>
 {
-    if (builder.Environment.IsDevelopment())
-    {
-        options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowNetlify",
+        policy =>
         {
-            policy.WithOrigins(
-                    "http://localhost:3000", 
-                    "https://localhost:3000",
-                    "http://localhost:5173",
-                    "https://localhost:5173",
-                    "https://quickcrm.vercel.app",
-                    "https://*.vercel.app",
-                    "https://quickcrm-app.netlify.app",
-                    "https://*.netlify.app"
-                  )
-                  .AllowAnyMethod()
+            policy.WithOrigins("https://quickcrm-app.netlify.app")
                   .AllowAnyHeader()
-                  .AllowCredentials();
+                  .AllowAnyMethod();
         });
-    }
-    else
-    {
-        // Production CORS - sadece güvenli origin'ler
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new string[0];
-        options.AddPolicy("ProductionCors", policy =>
-        {
-            policy.WithOrigins(allowedOrigins)
-                  .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                  .WithHeaders("Content-Type", "Authorization", "X-Requested-With")
-                  .AllowCredentials();
-        });
-    }
 });
 
 var app = builder.Build();
@@ -255,15 +231,7 @@ if (builder.Configuration.GetValue<bool>("RateLimiting:EnableRateLimiting", fals
     app.UseMiddleware<QuickCRM.API.Middleware.RateLimitingMiddleware>();
 }
 
-// CORS policy selection
-if (app.Environment.IsDevelopment())
-{
-    app.UseCors("AllowAll");
-}
-else
-{
-    app.UseCors("ProductionCors");
-}
+app.UseCors("AllowNetlify"); // Authentication ve Authorization'dan önce çağrılmalı
 
 app.UseAuthentication();
 app.UseAuthorization();
