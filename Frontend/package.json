@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:netlify": "npm ci --legacy-peer-deps && tsc && vite build",
     "preview": "vite preview",
     "strip-bom": "node scripts/strip-bom.cjs"
   },
@@ -32,7 +33,6 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.13",
     "vite": "^7.1.6",
-    "vite-plugin-pwa": "^0.20.5",
     "terser": "^5.31.0"
   }
 }
