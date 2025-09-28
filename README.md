@@ -73,7 +73,8 @@ QuickCRM, küçük ve orta ölçekli işletmeler için tasarlanmış modern bir 
 ## 📱 Ekran Görüntüleri
 
 ### 🏠 Dashboard - Ana Sayfa
-![Dashboard](https://i.hizliresim.com/5x27150.png)
+![Dashboard](https://i.hizliresim.com/2yh41et.jpg)
+![Dashboard](https://i.hizliresim.com/mlg7tm3.jpg)
 
 **Özellikler:**
 - **📊 İstatistik Kartları**: Toplam müşteri, aktif müşteri ve bu ay eklenen müşteri sayıları
@@ -89,7 +90,8 @@ QuickCRM, küçük ve orta ölçekli işletmeler için tasarlanmış modern bir 
 ---
 
 ### 👥 Müşteriler - Müşteri Listesi
-![Customers](https://i.hizliresim.com/mtj9mav.png)
+![Customers](https://i.hizliresim.com/lxt5630.jpg)
+![Customers](https://i.hizliresim.com/3c34g2j.jpg)
 
 **Özellikler:**
 - **🔍 Gelişmiş Arama**: İsim, email, şirket bazında arama
@@ -108,7 +110,7 @@ QuickCRM, küçük ve orta ölçekli işletmeler için tasarlanmış modern bir 
 ---
 
 ### ➕ Yeni Müşteri - Müşteri Ekleme Formu
-![New Customer](https://i.hizliresim.com/rrq96bs.png)
+![New Customer](https://i.hizliresim.com/zd7fo7h.jpg)
 
 **Özellikler:**
 - **📝 Kapsamlı Form**: Tüm gerekli müşteri bilgileri
